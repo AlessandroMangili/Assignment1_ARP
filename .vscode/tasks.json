@@ -11,7 +11,8 @@
                 "-o",
                 "${fileDirname}/${fileBasenameNoExtension}",
                 "-I${fileDirname}/cJSON/cJSON.h",
-                "-lcjson"
+                "-lcjson", 
+                "-lncurses"
             ],
             "options": {
                 "cwd": "${fileDirname}"

@@ -1,5 +1,5 @@
 #include <ncurses.h>
-#include <signal.h> // Per gestire i segnali come SIGWINCH
+#include <signal.h>
 #include <stdlib.h>
 
 int term_rows, term_cols;
