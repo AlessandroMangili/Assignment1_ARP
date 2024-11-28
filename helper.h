@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 // Costanti per le dimensioni della box del keyboard_manager
 #define BOX_HEIGHT 3
@@ -18,5 +19,17 @@ typedef struct
 } Info;
 
 //typedef Info info;
+static inline __attribute__((always_inline)) void writeLog(FILE* file, char* message)
+{
+        fprintf(file, "%s\n", message);
+        fflush(file); 
+}
+
+#define LOG_TO_FILE(file, message)                                      \
+    {                                                                   \
+        char log[256];                                                  \
+        sprintf(log, "Generated at line [%d] by %s with the following message: %s", __LINE__, __FILE__, message);    \
+        writeLog(file, log);                                            \
+    }
 
 #endif
