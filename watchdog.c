@@ -59,7 +59,7 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
     }
 
     if (sig == SIGUSR2) {
-        LOG_TO_FILE(debug, "Quitting program and returning 0, terminating drone and server...\n");
+        LOG_TO_FILE(debug, "Quitting program and returning 0, terminating drone and server...");
         kill_processes();
         // Close the files
         fclose(debug);
@@ -119,15 +119,15 @@ void watchdog(int timeout) {
                 get_current_time(current_time, sizeof(current_time));
                 switch (i) {
                     case 0:
-                        snprintf(message, sizeof(message), "The SERVER process [%d] did not respond, or its last activity exceeded the timeout at %s\n", pids[i], current_time);
+                        snprintf(message, sizeof(message), "The SERVER process [%d] did not respond, or its last activity exceeded the timeout at %s", pids[i], current_time);
                         LOG_TO_FILE(debug, message);
                         break;
                     case 1:
-                        snprintf(message, sizeof(message), "The DRONE process [%d] did not respond, or its last activity exceeded the timeout at %s\n", pids[i], current_time);
+                        snprintf(message, sizeof(message), "The DRONE process [%d] did not respond, or its last activity exceeded the timeout at %s", pids[i], current_time);
                         LOG_TO_FILE(debug, message);
                         break;
                     case 2:
-                        snprintf(message, sizeof(message), "The INPUT process [%d] did not respond, or its last activity exceeded the timeout at %s\n", pids[i], current_time);
+                        snprintf(message, sizeof(message), "The INPUT process [%d] did not respond, or its last activity exceeded the timeout at %s", pids[i], current_time);
                         LOG_TO_FILE(debug, message);
                         break;
                 }
@@ -155,8 +155,8 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    if (argc != 3) {
-        LOG_TO_FILE(errors, "Invalid number of parameters\n");
+    if (argc != 4) {
+        LOG_TO_FILE(errors, "Invalid number of parameters");
         // Close the files
         fclose(debug);
         fclose(errors);
@@ -164,7 +164,7 @@ int main(int argc, char* argv[]) {
     }
 
     for (int i = 0; i < N_PROCS; i++) {
-        pids[i] = atoi(argv[0]);
+        pids[i] = atoi(argv[i+1]);
     }
 
     struct sigaction sa;

@@ -109,14 +109,24 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
     }
     if (sig == SIGUSR1) {
         wd_pid = info->si_pid;
-        fprintf(debug, "%s\n", "Signal SIGUSR1 received from WATCHDOG");
+        LOG_TO_FILE(debug, "Signal SIGUSR1 received from WATCHDOG");
         kill(wd_pid, SIGUSR1);
     }
     
     if (sig == SIGUSR2){
-        fprintf(debug, "%s\n", "Terminating by WATCHDOG");
+        LOG_TO_FILE(debug, "Terminating by WATCHDOG");
+        // Close the files
         fclose(errors);
         fclose(debug);
+        // Clear the windows
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                delwin(windows[i][j]);
+            }
+        }
+        delwin(input_window);
+        delwin(info_window);
+        endwin();
         exit(EXIT_FAILURE);
     }
 }
