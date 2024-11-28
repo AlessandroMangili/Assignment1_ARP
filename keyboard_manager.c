@@ -1,16 +1,16 @@
+#include <stdio.h>
+#include <stdlib.h>
 #include <fcntl.h> 
 #include <ncurses.h>
 #include <signal.h>
 #include <unistd.h>
 #include "helper.h"
 
-WINDOW *input_window, *info_window, *windows[3][3];
-// File descriptors for the two log files
-FILE *debug, *errors;
+WINDOW *input_window, *info_window, *windows[3][3]; 
+FILE *debug, *errors;                               // File descriptors for the two log files
 Info information;
 pid_t wd_pid = -1;
-// Symbols for the keyboard
-const char *symbols[3][3] = {
+const char *symbols[3][3] = {                       // Symbols for the keyboard
     {"\\", "^", "/"},
     {"<", "S", ">"},
     {"/", "v", "\\"}
@@ -104,12 +104,10 @@ void resize_windows() {
 }
 
 void signal_handler(int sig, siginfo_t* info, void *context) {
-    // Handler per il segnale SIGWINCH
     if (sig == SIGWINCH) {
         resize_windows();
     }
     if (sig == SIGUSR1) {
-        // SIGUSR1 received
         wd_pid = info->si_pid;
         fprintf(debug, "%s\n", "Signal SIGUSR1 received from WATCHDOG");
         kill(wd_pid, SIGUSR1);
@@ -126,7 +124,16 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
 int main() {
     int rows, cols;
     debug = fopen("debug.log", "a");
+    if (debug == NULL) {
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
     errors = fopen("errors.log", "a");
+    if (errors == NULL) {
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+    
     LOG_TO_FILE(debug, "Process started");
 
     initscr();
@@ -200,6 +207,8 @@ int main() {
                 break;
         }
     }
+    // Send the termination signal to the watchdog
+    kill(wd_pid, SIGUSR2);
 
     // Clear the windows
     for (int i = 0; i < 3; i++) {

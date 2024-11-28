@@ -54,4 +54,5 @@ Module.symvers
 Mkfile.old
 dkms.conf
 keyboard_manager
+watchdog
 

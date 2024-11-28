@@ -4,12 +4,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/file.h>
 
-// Costanti per le dimensioni della box del keyboard_manager
-#define BOX_HEIGHT 3
-#define BOX_WIDTH 5
-#define INFO_WIDTH 40 // Larghezza della finestra di destra
-#define PADDING 2     // Spaziatura tra le sezioni
+#define BOX_HEIGHT 3    // Height of the box of each key
+#define BOX_WIDTH 5     // Width of the box of each key
+
+#define TIMEOUT 10      // Number of seconds after which, if a process does not respond, the watchdog terminates all the processes
+#define N_PROCS 3       // Number of processes of the watchdog
 
 typedef struct
 {
@@ -21,13 +22,23 @@ typedef struct
 //typedef Info info;
 static inline __attribute__((always_inline)) void writeLog(FILE* file, char* message)
 {
-        fprintf(file, "%s\n", message);
-        fflush(file); 
+    int lockResult = flock(fileno(file), LOCK_EX);
+    if (lockResult == -1) {
+        perror("Failed to lock the log file");
+        exit(EXIT_FAILURE);
+    }
+    fprintf(file, "%s\n", message);
+    fflush(file);
+    int unlockResult = flock(fileno(file), LOCK_UN);
+    if (unlockResult == -1) {
+        perror("Failed to unlock the log file");
+        exit(EXIT_FAILURE);
+    }
 }
 
 #define LOG_TO_FILE(file, message)                                      \
     {                                                                   \
-        char log[256];                                                  \
+        char log[1024];                                                  \
         sprintf(log, "Generated at line [%d] by %s with the following message: %s", __LINE__, __FILE__, message);    \
         writeLog(file, log);                                            \
     }
