@@ -22,7 +22,7 @@ int main() {
     }
 
     pid_t pids[N_PROCS], wd;
-    char *inputs[N_PROCS][3] = {{"./server", NULL}, {"./drone", NULL}, {"./keyboard_manager", NULL}};
+    char *inputs[N_PROCS][5] = {{"./server", NULL}, {"./drone", NULL}, {"konsole", "--hold", "-e", "./keyboard_manager", NULL}};
 
     /* INTRO */
     char key;

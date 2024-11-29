@@ -8,8 +8,8 @@
 
 WINDOW *input_window, *info_window, *windows[3][3]; 
 FILE *debug, *errors;                               // File descriptors for the two log files
-Info information;
-pid_t wd_pid = -1;
+Drone drone;
+pid_t wd_pid;
 const char *symbols[3][3] = {                       // Symbols for the keyboard
     {"\\", "^", "/"},
     {"<", "S", ">"},
@@ -34,7 +34,7 @@ void handle_key_pressed(WINDOW *win, const char *symbol) {
 }
 
 // Update the information window
-void update_info_window(Info information) {
+void update_info_window(Drone drone) {
     werase(info_window);
     box(info_window, 0, 0);
 
@@ -44,18 +44,18 @@ void update_info_window(Info information) {
     int middle_col = cols / 4;
     int middle_row = rows / 4;
     mvwprintw(info_window, middle_row - 2, middle_col - 7, "position {");
-    mvwprintw(info_window, middle_row - 1, middle_col - 6, "x: %.6f", information.position_x);
-    mvwprintw(info_window, middle_row, middle_col - 6, "y: %.6f", information.position_y);
+    mvwprintw(info_window, middle_row - 1, middle_col - 6, "x: %.6f", drone.pos_x);
+    mvwprintw(info_window, middle_row, middle_col - 6, "y: %.6f", drone.pos_y);
     mvwprintw(info_window, middle_row + 1, middle_col - 7, "}");
 
     mvwprintw(info_window, middle_row + 3, middle_col - 7, "velocity {");
-    mvwprintw(info_window, middle_row + 4, middle_col - 6, "x: %.6f", information.velocity_x);
-    mvwprintw(info_window, middle_row + 5, middle_col - 6, "y: %.6f", information.velocity_y);
+    mvwprintw(info_window, middle_row + 4, middle_col - 6, "x: %.6f", drone.vel_x);
+    mvwprintw(info_window, middle_row + 5, middle_col - 6, "y: %.6f", drone.vel_y);
     mvwprintw(info_window, middle_row + 6, middle_col - 7, "}");
 
     mvwprintw(info_window, middle_row + 8, middle_col - 7, "force {");
-    mvwprintw(info_window, middle_row + 9, middle_col - 6, "x: %.6f", information.force_x);
-    mvwprintw(info_window, middle_row + 10, middle_col - 6, "y: %.6f", information.force_y);
+    mvwprintw(info_window, middle_row + 9, middle_col - 6, "x: %.6f", drone.force_x);
+    mvwprintw(info_window, middle_row + 10, middle_col - 6, "y: %.6f", drone.force_y);
     mvwprintw(info_window, middle_row + 11, middle_col - 7, "}");
     wrefresh(info_window);
 }
@@ -81,7 +81,7 @@ void create_keyboard_window(int rows, int cols) {
     wrefresh(input_window);
     
     box(info_window, 0, 0);
-    update_info_window(information);
+    update_info_window(drone);
     mvwprintw(info_window, 0, 2, "Info output");
     wrefresh(info_window);
 }
@@ -104,6 +104,7 @@ void resize_windows() {
 }
 
 void signal_handler(int sig, siginfo_t* info, void *context) {
+    LOG_TO_FILE(debug, "INCOMING SIGNAL");
     if (sig == SIGWINCH) {
         resize_windows();
     }
@@ -114,7 +115,7 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
     }
     
     if (sig == SIGUSR2){
-        LOG_TO_FILE(debug, "Terminating by WATCHDOG");
+        LOG_TO_FILE(debug, "Shutting down by the WATCHDOG");
         // Close the files
         fclose(errors);
         fclose(debug);
@@ -131,7 +132,7 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
     }
 }
 
-int main() {
+int main(int argc, char* argv[]) {
     int rows, cols;
     debug = fopen("debug.log", "a");
     if (debug == NULL) {
@@ -185,6 +186,7 @@ int main() {
 
     int ch;
     while ((ch = getch()) != 'p' && ch != 'P') {
+        LOG_TO_FILE(debug, "ASK");
         switch (ch) {
             case 'w': case 'W':
                 handle_key_pressed(windows[0][0], symbols[0][0]);
@@ -217,6 +219,7 @@ int main() {
                 break;
         }
     }
+    LOG_TO_FILE(debug, "CLOSING");
     // Send the termination signal to the watchdog
     kill(wd_pid, SIGUSR2);
 

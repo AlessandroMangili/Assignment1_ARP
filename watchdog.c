@@ -59,7 +59,7 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
     }
 
     if (sig == SIGUSR2) {
-        LOG_TO_FILE(debug, "Quitting program and returning 0, terminating drone and server...");
+        LOG_TO_FILE(debug, "The keyboard manager has sent the termination signal, shutting down the drone and the server...");
         kill_processes();
         // Close the files
         fclose(debug);
@@ -155,7 +155,7 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    if (argc != 4) {
+    if (argc != N_PROCS + 1) {
         LOG_TO_FILE(errors, "Invalid number of parameters");
         // Close the files
         fclose(debug);

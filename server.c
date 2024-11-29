@@ -1,16 +1,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <signal.h>
 #include <fcntl.h>
 #include <sys/select.h>
 #include <string.h>
 #include <sys/time.h>
+#include "helper.h"
 
 // Number of processes
 #define NUM_CLIENTS 4
 // Shared memory
 int shared_memory[2] = {0};
 int shared_memory_readers[2] = {0};
+FILE *debug, *errors;                       // File descriptors for the two log files
+pid_t wd_pid, map_pid;
 
 typedef struct {
     int client_get_fd; // Used by server for reading messages from client
@@ -20,7 +24,6 @@ typedef struct {
 } Pipe;
 
 void server(Pipe pipes[], int shared_memory[]) {
-    printf("SERVER STARTED\n\n");
     // Close useless file descriptor
     for (int i = 0; i < NUM_CLIENTS; i++) {
         close(pipes[i].client_put_fd);
@@ -124,20 +127,84 @@ void server(Pipe pipes[], int shared_memory[]) {
     }
 }
 
+void signal_handler(int sig, siginfo_t* info, void *context) {
+    if (sig == SIGUSR1) {
+        wd_pid = info->si_pid;
+        LOG_TO_FILE(debug, "Signal SIGUSR1 received from WATCHDOG");
+        kill(wd_pid, SIGUSR1);
+    }
+
+    if (sig == SIGUSR2) {
+        LOG_TO_FILE(debug, "Shutting down by the WATCHDOG");
+        if (kill(map_pid, SIGTERM) == -1) {
+            perror("kill");
+            LOG_TO_FILE(errors, "Error in sending SIGTERM signal to the MAP");
+            exit(EXIT_FAILURE);
+        }
+        // Close the files
+        fclose(errors);
+        fclose(debug);
+        
+        exit(EXIT_SUCCESS);
+    }
+}
+
 int main(int argc, char *argv[]) {
-    if (argc != 16) {
-        fprintf(stderr, "[SERVER]: invalid number of parameters for the server\n");
+    debug = fopen("debug.log", "a");
+    if (debug == NULL) {
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+    errors = fopen("errors.log", "a");
+    if (errors == NULL) {
+        perror("fopen");
         exit(EXIT_FAILURE);
     }
 
-    Pipe pipes[NUM_CLIENTS];
-    for (int i = 0; i < NUM_CLIENTS; i++) {
-        pipes[i].client_get_fd = atoi(argv[i * NUM_CLIENTS]);
-        pipes[i].client_put_fd = atoi(argv[1 + i * NUM_CLIENTS]);
-        pipes[i].server_get_fd = atoi(argv[2 + i * NUM_CLIENTS]);
-        pipes[i].server_put_fd = atoi(argv[3 + i * NUM_CLIENTS]);
+    LOG_TO_FILE(debug, "Process started");
+
+    char *map_window_path[] = {"konsole", "-e", "./map_window", NULL};
+    map_pid = fork();
+    if (map_pid ==-1){
+        perror("fork");
+        LOG_TO_FILE(errors, "Error in forking the map window file");
+        exit(EXIT_FAILURE);
     }
-    server(pipes, shared_memory);
+    if (map_pid == 0){
+        execvp(map_window_path[0], map_window_path);
+        perror("Exec failed");
+        LOG_TO_FILE(errors, "Unable to exec the map_window process");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+    
+    struct sigaction sa;
+    sa.sa_flags = SA_SIGINFO;
+    sa.sa_sigaction = signal_handler;
+    sigemptyset(&sa.sa_mask);
+
+    // Set the signal handler for SIGUSR1
+    if (sigaction(SIGUSR1, &sa, NULL) == -1) {
+        perror("sigaction");
+        LOG_TO_FILE(errors, "Error in sigaction(SIGURS1)");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+    // Set the signal handler for SIGUSR2
+    if(sigaction(SIGUSR2, &sa, NULL) == -1){
+        perror("sigaction");
+        LOG_TO_FILE(errors, "Error in sigaction(SIGURS2)");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+
+    while (1) {}
 
     return 0;
 }
