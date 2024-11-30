@@ -69,13 +69,12 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
 }
 
 void watchdog(int timeout) {
-    LOG_TO_FILE(debug, "Process started");
     char message[256], current_time[32];
 
     time_t start, finish;
     double diff; 
     while (1) {
-        for (int i = 0; i< N_PROCS; i++) {
+        for (int i = 0; i < N_PROCS; i++) {
             status[i] = false;
             if (kill(pids[i], SIGUSR1) == -1) {
                 perror("kill");
@@ -154,6 +153,8 @@ int main(int argc, char* argv[]) {
         kill_processes();
         exit(EXIT_FAILURE);
     }
+
+    LOG_TO_FILE(debug, "Process started");
 
     if (argc != N_PROCS + 1) {
         LOG_TO_FILE(errors, "Invalid number of parameters");

@@ -12,7 +12,7 @@ Drone drone;
 pid_t wd_pid;
 const char *symbols[3][3] = {                       // Symbols for the keyboard
     {"\\", "^", "/"},
-    {"<", "S", ">"},
+    {"<", "D", ">"},
     {"/", "v", "\\"}
 };
 
@@ -104,7 +104,6 @@ void resize_windows() {
 }
 
 void signal_handler(int sig, siginfo_t* info, void *context) {
-    LOG_TO_FILE(debug, "INCOMING SIGNAL");
     if (sig == SIGWINCH) {
         resize_windows();
     }
@@ -145,6 +144,7 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
     
+    char buff[30];
     LOG_TO_FILE(debug, "Process started");
 
     initscr();
@@ -186,7 +186,6 @@ int main(int argc, char* argv[]) {
 
     int ch;
     while ((ch = getch()) != 'p' && ch != 'P') {
-        LOG_TO_FILE(debug, "ASK");
         switch (ch) {
             case 'w': case 'W':
                 handle_key_pressed(windows[0][0], symbols[0][0]);
@@ -219,7 +218,6 @@ int main(int argc, char* argv[]) {
                 break;
         }
     }
-    LOG_TO_FILE(debug, "CLOSING");
     // Send the termination signal to the watchdog
     kill(wd_pid, SIGUSR2);
 

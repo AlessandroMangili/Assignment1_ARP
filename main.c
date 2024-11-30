@@ -9,6 +9,26 @@
 
 FILE *debug, *errors;       // File descriptors for the two log files
 
+int get_konsole_child(pid_t konsole_pid) {
+    char cmd[100];
+    sprintf(cmd, "ps --ppid %d -o pid= 2>/dev/null", konsole_pid);
+
+    FILE *pipe = popen(cmd, "r");
+    if (pipe == NULL) {
+        perror("popen");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+
+    int child_pid;
+    fscanf(pipe, "%d", &child_pid);
+
+    pclose(pipe);
+    return child_pid;
+}
+
 int main() {
     debug = fopen("debug.log", "a");
     if (debug == NULL) {
@@ -20,9 +40,6 @@ int main() {
         perror("fopen");
         exit(EXIT_FAILURE);
     }
-
-    pid_t pids[N_PROCS], wd;
-    char *inputs[N_PROCS][5] = {{"./server", NULL}, {"./drone", NULL}, {"konsole", "--hold", "-e", "./keyboard_manager", NULL}};
 
     /* INTRO */
     char key;
@@ -77,7 +94,10 @@ int main() {
         }
     } while (!forward);
 
-    for (int i = 0; i < N_PROCS; i++) {
+    /* PROCESSES */
+    pid_t pids[N_PROCS], wd;
+    char *inputs[N_PROCS - 1][2] = {{"./server", NULL}, {"./drone", NULL}};
+    for (int i = 0; i < N_PROCS - 1; i++) {
         pids[i] = fork();
         if (pids[i] < 0) {
             perror("Fork");
@@ -98,13 +118,43 @@ int main() {
         }
         usleep(500000);
     }
+
+    /* INPUT */
+    pid_t konsole;
+    konsole = fork();
+    char *keyboard_input[] = {"konsole", "-e", "./keyboard_manager", NULL};
+    if (konsole < 0) {
+        perror("Fork");
+        LOG_TO_FILE(errors, "Unable to fork");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+    if (konsole == 0) {
+        execvp(keyboard_input[0], keyboard_input);
+        perror("Exec failed");
+        LOG_TO_FILE(errors, "Unable to exec a process");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+    if (konsole != 0) {
+        usleep(500000);    
+        pids[N_PROCS - 1] = get_konsole_child(konsole);
+    }
+    
     usleep(500000);
 
     char pids_string[N_PROCS][50];
+    char *wd_input[N_PROCS + 2];
+    wd_input[0] = "./watchdog";
     for(int i = 0; i < N_PROCS; i++) {
         sprintf(pids_string[i], "%d", pids[i]);
+        wd_input[i + 1] = pids_string[i];
     }
-    char *wd_input[] = {"./watchdog", pids_string[0], pids_string[1], pids_string[2], NULL};
+    wd_input[N_PROCS + 1] = NULL;
     wd = fork();
     if (wd < 0) {
         perror("Fork");
