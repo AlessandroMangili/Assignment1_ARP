@@ -13,12 +13,23 @@
 #define TIMEOUT 10      // Number of seconds after which, if a process does not respond, the watchdog terminates all the processes
 #define N_PROCS 3       // Number of processes of the watchdog
 
-typedef struct
-{
+#define MASS 2    
+#define FRICTION_COEFFICIENT 0.5   
+#define FORCE_MODULE 1.0 
+#define T 0.5
+#define MAXFREP 15 
+
+#define N_OBS 10 
+
+typedef struct {
     float pos_x, pos_y;
     float vel_x, vel_y;
     float force_x, force_y;
 } Drone;
+
+typedef struct {
+    float pos_x, pos_y;
+} Obstacle;
 
 //typedef Info info;
 static inline __attribute__((always_inline)) void writeLog(FILE* file, char* message)

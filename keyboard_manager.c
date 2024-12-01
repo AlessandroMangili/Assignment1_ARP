@@ -4,17 +4,46 @@
 #include <ncurses.h>
 #include <signal.h>
 #include <unistd.h>
+#include <sys/shm.h>
+#include <sys/mman.h>
 #include "helper.h"
 
 WINDOW *input_window, *info_window, *windows[3][3]; 
 FILE *debug, *errors;                               // File descriptors for the two log files
-Drone drone;
+Drone *drone;
 pid_t wd_pid;
 const char *symbols[3][3] = {                       // Symbols for the keyboard
     {"\\", "^", "/"},
     {"<", "D", ">"},
     {"/", "v", "\\"}
 };
+
+// Update the information window
+void update_info_window(Drone *drone) {
+    werase(info_window);
+    box(info_window, 0, 0);
+
+    int rows, cols;
+    getmaxyx(stdscr, rows, cols);
+
+    int middle_col = cols / 4;
+    int middle_row = rows / 4;
+    mvwprintw(info_window, middle_row - 2, middle_col - 7, "position {");
+    mvwprintw(info_window, middle_row - 1, middle_col - 6, "x: %.6f", drone->pos_x);
+    mvwprintw(info_window, middle_row, middle_col - 6, "y: %.6f", drone->pos_y);
+    mvwprintw(info_window, middle_row + 1, middle_col - 7, "}");
+
+    mvwprintw(info_window, middle_row + 3, middle_col - 7, "velocity {");
+    mvwprintw(info_window, middle_row + 4, middle_col - 6, "x: %.6f", drone->vel_x);
+    mvwprintw(info_window, middle_row + 5, middle_col - 6, "y: %.6f", drone->vel_y);
+    mvwprintw(info_window, middle_row + 6, middle_col - 7, "}");
+
+    mvwprintw(info_window, middle_row + 8, middle_col - 7, "force {");
+    mvwprintw(info_window, middle_row + 9, middle_col - 6, "x: %.6f", drone->force_x);
+    mvwprintw(info_window, middle_row + 10, middle_col - 6, "y: %.6f", drone->force_y);
+    mvwprintw(info_window, middle_row + 11, middle_col - 7, "}");
+    wrefresh(info_window);
+}
 
 // Draw the box for the key
 void draw_box(WINDOW *win, const char *symbol) {
@@ -31,33 +60,6 @@ void handle_key_pressed(WINDOW *win, const char *symbol) {
     usleep(200000);
     wattroff(win, COLOR_PAIR(2));
     draw_box(win, symbol);
-}
-
-// Update the information window
-void update_info_window(Drone drone) {
-    werase(info_window);
-    box(info_window, 0, 0);
-
-    int rows, cols;
-    getmaxyx(stdscr, rows, cols);
-
-    int middle_col = cols / 4;
-    int middle_row = rows / 4;
-    mvwprintw(info_window, middle_row - 2, middle_col - 7, "position {");
-    mvwprintw(info_window, middle_row - 1, middle_col - 6, "x: %.6f", drone.pos_x);
-    mvwprintw(info_window, middle_row, middle_col - 6, "y: %.6f", drone.pos_y);
-    mvwprintw(info_window, middle_row + 1, middle_col - 7, "}");
-
-    mvwprintw(info_window, middle_row + 3, middle_col - 7, "velocity {");
-    mvwprintw(info_window, middle_row + 4, middle_col - 6, "x: %.6f", drone.vel_x);
-    mvwprintw(info_window, middle_row + 5, middle_col - 6, "y: %.6f", drone.vel_y);
-    mvwprintw(info_window, middle_row + 6, middle_col - 7, "}");
-
-    mvwprintw(info_window, middle_row + 8, middle_col - 7, "force {");
-    mvwprintw(info_window, middle_row + 9, middle_col - 6, "x: %.6f", drone.force_x);
-    mvwprintw(info_window, middle_row + 10, middle_col - 6, "y: %.6f", drone.force_y);
-    mvwprintw(info_window, middle_row + 11, middle_col - 7, "}");
-    wrefresh(info_window);
 }
 
 void create_keyboard_window(int rows, int cols) {
@@ -144,8 +146,30 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
     
-    char buff[30];
     LOG_TO_FILE(debug, "Process started");
+
+    const char *shared_memory = "/drone_memory";
+    const int SIZE = 4096;
+    int i, mem_fd;
+    mem_fd = shm_open(shared_memory, O_RDWR, 0666); // open shared memory segment for read and write
+    if (mem_fd == -1) {
+        perror("Opening the shared memory \n");
+        LOG_TO_FILE(errors, "Error in opening the shared memory");
+        // Close the files
+        fclose(debug);
+        fclose(errors);   
+        exit(EXIT_FAILURE);
+    }
+
+    drone = (Drone *)mmap(0, SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd, 0); // protocol write
+    if (drone == MAP_FAILED) {
+        perror("Map failed");
+        LOG_TO_FILE(errors, "Map Failed");
+        // Close the files
+        fclose(debug);
+        fclose(errors);   
+        exit(EXIT_FAILURE);
+    }
 
     initscr();
     start_color();
@@ -182,37 +206,64 @@ int main(int argc, char* argv[]) {
         perror("sigaction");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS2)");
         exit(EXIT_FAILURE);
-    }
+    }    
 
     int ch;
     while ((ch = getch()) != 'p' && ch != 'P') {
         switch (ch) {
             case 'w': case 'W':
                 handle_key_pressed(windows[0][0], symbols[0][0]);
+                drone->force_x -= 2.5;
+                drone->force_y += 2.5;
+                update_info_window(drone);
                 break;
             case 'e': case 'E':
                 handle_key_pressed(windows[0][1], symbols[0][1]);
+                drone->force_x += 0;
+                drone->force_y += 5;
+                update_info_window(drone);
                 break;
             case 'r': case 'R':
                 handle_key_pressed(windows[0][2], symbols[0][2]);
+                drone->force_x += 2.5;
+                drone->force_y += 2.5;
+                update_info_window(drone);
                 break;
             case 's': case 'S':
                 handle_key_pressed(windows[1][0], symbols[1][0]);
+                drone->force_x += -5;
+                drone->force_y += 0;
+                update_info_window(drone);
                 break;
             case 'd': case 'D':
                 handle_key_pressed(windows[1][1], symbols[1][1]);
+                drone->force_x = 0;
+                drone->force_y = 0;
+                update_info_window(drone);
                 break;
             case 'f': case 'F':
                 handle_key_pressed(windows[1][2], symbols[1][2]);
+                drone->force_x += 5;
+                drone->force_y += 0;
+                update_info_window(drone);
                 break;
             case 'x': case 'X':
                 handle_key_pressed(windows[2][0], symbols[2][0]);
+                drone->force_x += -2.5;
+                drone->force_y += -2.5;
+                update_info_window(drone);
                 break;
             case 'c': case 'C':
                 handle_key_pressed(windows[2][1], symbols[2][1]);
+                drone->force_x += 0;
+                drone->force_y += -5;
+                update_info_window(drone);
                 break;
             case 'v': case 'V':
                 handle_key_pressed(windows[2][2], symbols[2][2]);
+                drone->force_x += 2.5;
+                drone->force_y += -2.5;
+                update_info_window(drone);
                 break;
             default:
                 break;
@@ -230,6 +281,24 @@ int main(int argc, char* argv[]) {
     delwin(input_window);
     delwin(info_window);
     endwin();
+
+    if (shm_unlink(shared_memory) == -1) {
+        perror("Unlink shared memory");
+        LOG_TO_FILE(errors, "Error in removing the shared memory");
+        // Close the files
+        fclose(debug);
+        fclose(errors); 
+        exit(EXIT_FAILURE);
+    }
+    if (close(mem_fd) == -1) {
+        perror("Close file descriptor");
+        LOG_TO_FILE(errors, "Error in closing the shared memory");
+        // Close the files
+        fclose(debug);
+        fclose(errors); 
+        exit(EXIT_FAILURE);
+    }
+    munmap(drone, SIZE);
 
     // Close the files
     fclose(debug);
