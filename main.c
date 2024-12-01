@@ -9,9 +9,10 @@
 
 FILE *debug, *errors;       // File descriptors for the two log files
 
-int get_konsole_child(pid_t konsole_pid) {
+// Gets the pid of the process running on the Konsole terminal
+int get_konsole_child(pid_t konsole) {
     char cmd[100];
-    sprintf(cmd, "ps --ppid %d -o pid= 2>/dev/null", konsole_pid);
+    sprintf(cmd, "ps --ppid %d -o pid= 2>/dev/null", konsole);
 
     FILE *pipe = popen(cmd, "r");
     if (pipe == NULL) {
@@ -22,11 +23,11 @@ int get_konsole_child(pid_t konsole_pid) {
         exit(EXIT_FAILURE);
     }
 
-    int child_pid;
-    fscanf(pipe, "%d", &child_pid);
+    int pid;
+    fscanf(pipe, "%d", &pid);
 
     pclose(pipe);
-    return child_pid;
+    return pid;
 }
 
 int main() {
@@ -44,13 +45,11 @@ int main() {
     /* INTRO */
     char key;
     bool forward = false;
-    // Descrizione più accattivante del gioco
     printf("\n\n\t\t   In this thrilling drone control challenge, you’ll need to navigate\n");
     printf("\t\t   through an obstacle-filled environment. Your skills will be tested,\n");
     printf("\t\t   and only the best will be able to complete the mission.\n");
     printf("\t\t   Use the controls wisely and stay sharp!\n\n");
 
-    // Nuovo riquadro con le istruzioni
     printf("\t\t  ###########################\n");
     printf("\t\t  #  COMMANDS AND CONTROLS  #\n");
     printf("\t\t  ###########################\n");
@@ -71,14 +70,14 @@ int main() {
     printf("\n");
     printf("\t\t  ###########################\n");
 
-    printf("\nEnter 's' to start the mission or 'p' to quit\n");
+    printf("\nEnter 's' to start the game or 'p' to quit\n");
     scanf("%c", &key);
     do {
         switch (key) {
             case 's':
                 forward = true;
                 printf("\n\n\t\t    ****************************************\n");
-                printf("\t\t    *          MISSION STARTED!            *\n");
+                printf("\t\t    *          GAME STARTED!            *\n");
                 printf("\t\t    *    Get ready to control the drone!   *\n");
                 printf("\t\t    ****************************************\n\n");
                 break;
@@ -94,7 +93,7 @@ int main() {
         }
     } while (!forward);
 
-    /* PROCESSES */
+    /* LAUNCH THE SERVER AND THE DRONE */
     pid_t pids[N_PROCS], wd;
     char *inputs[N_PROCS - 1][2] = {{"./server", NULL}, {"./drone", NULL}};
     for (int i = 0; i < N_PROCS - 1; i++) {
@@ -119,7 +118,7 @@ int main() {
         usleep(500000);
     }
 
-    /* INPUT */
+    /* LAUNCH THE INPUT */
     pid_t konsole;
     konsole = fork();
     char *keyboard_input[] = {"konsole", "-e", "./keyboard_manager", NULL};
@@ -146,7 +145,7 @@ int main() {
     }
     
     usleep(500000);
-
+    /* LAUNCH THE WATCHDOG */
     char pids_string[N_PROCS][50];
     char *wd_input[N_PROCS + 2];
     wd_input[0] = "./watchdog";
