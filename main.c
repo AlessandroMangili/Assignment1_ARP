@@ -93,8 +93,16 @@ int main() {
         }
     } while (!forward);
 
-    int drone_pipe_fds[2], input_pipe_fds[2];
+    int drone_pipe_fds[2], drone2_pipe_fds[2], input_pipe_fds[2];
     if (pipe(drone_pipe_fds) == -1) {
+        perror("pipe");
+        LOG_TO_FILE(errors, "Error in creating the pipe for the server-drone");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+    if (pipe(drone2_pipe_fds) == -1) {
         perror("pipe");
         LOG_TO_FILE(errors, "Error in creating the pipe for the server-drone");
         // Close the files
@@ -112,15 +120,17 @@ int main() {
     }
 
     /* LAUNCH THE SERVER AND THE DRONE */
-    char write_drone_fd_str[10], write_input_fd_str[10];
-    char read_drone_fd_str[10], read_input_fd_str[10];
+    char write_drone_fd_str[10], write_drone2_fd_str[10], write_input_fd_str[10];
+    char read_drone_fd_str[10], read_drone2_fd_str[10], read_input_fd_str[10];
     snprintf(write_drone_fd_str, sizeof(write_drone_fd_str), "%d", drone_pipe_fds[1]);
+    snprintf(write_drone2_fd_str, sizeof(write_drone2_fd_str), "%d", drone2_pipe_fds[1]);
     snprintf(write_input_fd_str, sizeof(write_drone_fd_str), "%d", input_pipe_fds[1]);
-    snprintf(read_drone_fd_str, sizeof(write_drone_fd_str), "%d", drone_pipe_fds[0]);
-    snprintf(read_input_fd_str, sizeof(write_drone_fd_str), "%d", input_pipe_fds[0]);
+    snprintf(read_drone_fd_str, sizeof(read_drone_fd_str), "%d", drone_pipe_fds[0]);
+    snprintf(read_drone2_fd_str, sizeof(read_drone2_fd_str), "%d", drone2_pipe_fds[0]);
+    snprintf(read_input_fd_str, sizeof(read_drone_fd_str), "%d", input_pipe_fds[0]);
 
     pid_t pids[N_PROCS], wd;
-    char *inputs[N_PROCS - 1][4] = {{"./server", write_drone_fd_str, read_input_fd_str, NULL}, {"./drone", read_drone_fd_str, NULL}};
+    char *inputs[N_PROCS - 1][5] = {{"./server", write_drone_fd_str, write_drone2_fd_str, read_input_fd_str, NULL}, {"./drone", read_drone_fd_str, read_drone2_fd_str, NULL}};
     for (int i = 0; i < N_PROCS - 1; i++) {
         pids[i] = fork();
         if (pids[i] < 0) {

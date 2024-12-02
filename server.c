@@ -163,7 +163,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    if (argc < 3) {
+    if (argc < 4) {
         LOG_TO_FILE(errors, "Invalid number of parameters");
         // Close the files
         fclose(debug);
@@ -172,14 +172,15 @@ int main(int argc, char *argv[]) {
     }
     // Converti il parametro passato in un file descriptor
     int drone_fd = atoi(argv[1]);
-    int input_fd = atoi(argv[2]);
+    int drone2_fd = atoi(argv[2]);
+    int input_fd = atoi(argv[3]);
 
     LOG_TO_FILE(debug, "Process started");
 
     // Create the shared memory
     Drone *drone;
-    const char *shared_memory = "/drone_memory";
-    const int SIZE = 4096;    
+    const int SIZE = 4096;
+    const char *shared_memory = "/drone_memory"; 
     int i, mem_fd;
     mem_fd = shm_open(shared_memory, O_CREAT | O_RDWR, 0666);
     if (mem_fd == -1) {
@@ -202,7 +203,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
     // Map the shared memory into a drone objects
-    drone = (Drone * )mmap(0, SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd, 0);
+    drone = (Drone *)mmap(0, SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd, 0);
     if (drone == MAP_FAILED) {
         perror("Map failed\n");
         LOG_TO_FILE(errors, "Map failed");
@@ -212,11 +213,16 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    // Open semaphore
-    sem_t *drone_sem;
-    drone_sem = sem_open("drone_sem", O_CREAT | O_RDWR, 0666, 1);
-    // initial position
-    sem_wait(drone_sem);
+    drone->sem = sem_open("drone_sem", O_CREAT | O_RDWR, 0666, 1);
+    if (drone->sem == SEM_FAILED) {
+        perror("sem_open");
+        LOG_TO_FILE(errors, "Error in opening semaphore");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+    sem_wait(drone->sem);
     LOG_TO_FILE(debug, "Initialized starting values");
     drone->pos_x = 10.0;
     drone->pos_y = 10.0;
@@ -224,7 +230,7 @@ int main(int argc, char *argv[]) {
     drone->vel_y = 0.0;
     drone->force_x = 0.0;
     drone->force_y = 0.0;
-    sem_post(drone_sem);
+    sem_post(drone->sem);
 
     // Pipe 
     int map_pipe_fds[2];
@@ -301,7 +307,7 @@ int main(int argc, char *argv[]) {
         FD_SET(input_fd, &read_fds);
 
         // Timeout per select (es. 5 secondi)
-        timeout.tv_sec = 5;
+        timeout.tv_sec = 1;
         timeout.tv_usec = 0;
         int activity;
         do{
@@ -313,8 +319,6 @@ int main(int argc, char *argv[]) {
             LOG_TO_FILE(errors, "Error in select");
             break;
         } else if (activity == 0) {
-            // Timeout scaduto
-            printf("[SERVER]: No data received in the last 5 seconds.\n");
             continue;
         }
 
@@ -324,40 +328,15 @@ int main(int argc, char *argv[]) {
             if (bytes_read > 0) {
                 buffer[bytes_read] = '\0'; // Termina la stringa
                 printf("[SERVER]: Received update: %s\n", buffer);
-                char msg[30];
-                strcpy(msg, "m ");
-                strcat(msg, buffer);
-                write(drone_fd, msg, strlen(msg));
-                //write(drone_fd, buffer, strlen(buffer));
-                LOG_TO_FILE(debug, buffer);
-            } else if (bytes_read == 0) {
-                // Pipe chiusa dall'altra estremità
-                printf("[SERVER]: Pipe closed by writer.\n");
-                break;
-            } else if (bytes_read == -1) {
-                perror("read");
-                LOG_TO_FILE(errors, "Error in reading from the pipe");
-                break;
+                write(drone_fd, buffer, strlen(buffer));
             }
         }
         if (FD_ISSET(input_fd, &read_fds)) {
             ssize_t bytes_read = read(input_fd, buffer, sizeof(buffer) - 1);
             if (bytes_read > 0) {
                 buffer[bytes_read] = '\0'; // Termina la stringa
-                printf("[SERVER]: Received update: %c\n", (char)atoi(buffer));
-                char msg[30];
-                strcpy(msg, "i ");
-                strcat(msg, buffer);
-                write(drone_fd, msg, strlen(msg));
-                LOG_TO_FILE(debug, msg);
-            } else if (bytes_read == 0) {
-                // Pipe chiusa dall'altra estremità
-                printf("[SERVER]: Pipe closed by writer.\n");
-                break;
-            } else if (bytes_read == -1) {
-                perror("read");
-                LOG_TO_FILE(errors, "Error in reading from the pipe");
-                break;
+                printf("[SERVER]: Received update: %s\n", buffer);
+                write(drone2_fd, buffer, strlen(buffer));
             }
         }
     }
@@ -379,6 +358,9 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
     munmap(drone, SIZE);
+
+    sem_close(drone->sem);
+    sem_unlink("drone_sem");
 
     // Close the files
     fclose(debug);

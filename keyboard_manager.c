@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <sys/shm.h>
 #include <sys/mman.h>
-#include <pthread.h> // Include per i thread
+#include <pthread.h>
 #include "helper.h"
 
 WINDOW *input_window, *info_window, *windows[3][3]; 
@@ -21,7 +21,7 @@ const char *symbols[3][3] = {                       // Symbols for the keyboard
 pthread_mutex_t info_window_mutex;                  // Mutex for synchronizing ncurses
 
 // Update the information window
-void update_info_window(Drone *drone) {
+void update_info_window() {
     werase(info_window);
     box(info_window, 0, 0);
     mvwprintw(info_window, 0, 2, "Info display");
@@ -52,7 +52,7 @@ void update_info_window(Drone *drone) {
 void *update_info_thread() {
     while (1) {
         pthread_mutex_lock(&info_window_mutex);
-        update_info_window(drone);
+        update_info_window();
         pthread_mutex_unlock(&info_window_mutex);
         usleep(50000);
     }
@@ -169,10 +169,10 @@ int main(int argc, char* argv[]) {
     LOG_TO_FILE(debug, "Process started");
 
     // Open the shared memory
-    const char *shared_memory = "/drone_memory";
     const int SIZE = 4096;
+    const char *shared_memory = "/drone_memory";
     int i, mem_fd;
-    mem_fd = shm_open(shared_memory, O_RDWR, 0666);
+    mem_fd = shm_open(shared_memory, O_RDONLY, 0666);
     if (mem_fd == -1) {
         perror("Opening the shared memory \n");
         LOG_TO_FILE(errors, "Error in opening the shared memory");
@@ -181,7 +181,7 @@ int main(int argc, char* argv[]) {
         fclose(errors);   
         exit(EXIT_FAILURE);
     }
-    drone = (Drone *)mmap(0, SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd, 0);
+    drone = (Drone *)mmap(0, SIZE, PROT_READ, MAP_SHARED, mem_fd, 0);
     if (drone == MAP_FAILED) {
         perror("Map failed");
         LOG_TO_FILE(errors, "Map Failed");
@@ -249,58 +249,9 @@ int main(int argc, char* argv[]) {
 
     int ch;
     while ((ch = getch()) != 'p' && ch != 'P') {
-        switch (ch) {
-            case 'w': case 'W':
-                handle_key_pressed(windows[0][0], symbols[0][0]);
-                drone->force_x -= 2.5;
-                drone->force_y += 2.5;
-                break;
-            case 'e': case 'E':
-                handle_key_pressed(windows[0][1], symbols[0][1]);
-                drone->force_x += 0;
-                drone->force_y += 5;
-                break;
-            case 'r': case 'R':
-                handle_key_pressed(windows[0][2], symbols[0][2]);
-                drone->force_x += 2.5;
-                drone->force_y += 2.5;
-                break;
-            case 's': case 'S':
-                handle_key_pressed(windows[1][0], symbols[1][0]);
-                drone->force_x += -5;
-                drone->force_y += 0;
-                break;
-            case 'd': case 'D':
-                handle_key_pressed(windows[1][1], symbols[1][1]);
-                drone->force_x = 0;
-                drone->force_y = 0;
-                break;
-            case 'f': case 'F':
-                handle_key_pressed(windows[1][2], symbols[1][2]);
-                drone->force_x += 5;
-                drone->force_y += 0;
-                break;
-            case 'x': case 'X':
-                handle_key_pressed(windows[2][0], symbols[2][0]);
-                drone->force_x += -2.5;
-                drone->force_y += -2.5;
-                break;
-            case 'c': case 'C':
-                handle_key_pressed(windows[2][1], symbols[2][1]);
-                drone->force_x += 0;
-                drone->force_y += -5;
-                break;
-            case 'v': case 'V':
-                handle_key_pressed(windows[2][2], symbols[2][2]);
-                drone->force_x += 2.5;
-                drone->force_y += -2.5;
-                break;
-            default:
-                break;
+        if (ch != EOF) {
+            write(pipe_fd, &ch, sizeof(ch));
         }
-        char buffer[10];
-        snprintf(buffer, sizeof(buffer), "%d", ch);
-        write(pipe_fd, buffer, strlen(buffer));
     }
     // Send the termination signal to the watchdog
     kill(wd_pid, SIGUSR2);

@@ -143,8 +143,9 @@ int main(int argc, char *argv[]) {
 
     // Open the shared memory
     Drone *drone;
+    const int SIZE = 4096;
     const char *drone_shared_memory = "/drone_memory";
-    int drone_mem_fd = shm_open(drone_shared_memory, O_RDWR, 0666);
+    int drone_mem_fd = shm_open(drone_shared_memory, O_RDONLY, 0666);
     if (drone_mem_fd == -1) {
         perror("Opening the shared memory \n");
         LOG_TO_FILE(errors, "Error in opening the shared memory");
@@ -153,7 +154,7 @@ int main(int argc, char *argv[]) {
         fclose(errors);   
         exit(EXIT_FAILURE);
     }
-    drone = (Drone *)mmap(0, sizeof(drone), PROT_READ | PROT_WRITE, MAP_SHARED, drone_mem_fd, 0);
+    drone = (Drone *)mmap(0, SIZE, PROT_READ, MAP_SHARED, drone_mem_fd, 0);
     if (drone == MAP_FAILED) {
         perror("Map failed");
         LOG_TO_FILE(errors, "Map Failed");
@@ -193,7 +194,7 @@ int main(int argc, char *argv[]) {
         fclose(errors); 
         exit(EXIT_FAILURE);
     }
-    munmap(drone, sizeof(drone));
+    munmap(drone, SIZE);
 
     // Close the files
     fclose(debug);

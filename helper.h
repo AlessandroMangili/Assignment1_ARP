@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/file.h>
+#include <semaphore.h>
 #include <time.h>
 
 #define BOX_HEIGHT 3    // Height of the box of each key
@@ -25,6 +26,7 @@ typedef struct {
     float pos_x, pos_y;
     float vel_x, vel_y;
     float force_x, force_y;
+    sem_t *sem;
 } Drone;
 
 typedef struct {

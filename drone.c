@@ -9,12 +9,14 @@
 #include <math.h>
 #include <errno.h>
 #include <sys/select.h>
+#include <pthread.h>
 #include "helper.h"
 
 FILE *debug, *errors;                               // File descriptors for the two log files
 pid_t wd_pid;
 float rho0 = 2, rho1 = 0.5, rho2 = 2, eta = 40;
 Game game;
+Drone *drone;
 
 float calculate_friction_force(float velocity) {
     return -FRICTION_COEFFICIENT * velocity;
@@ -75,6 +77,15 @@ void update_drone_position(Drone *drone, float dt) {
     if (drone->pos_x >= game.max_x) { drone->pos_x = game.max_x - 5; drone->vel_x = 0; drone->force_x = 0;}
     if (drone->pos_y < 0) {drone->pos_y = 0; drone->vel_y = 0; drone->force_y = 0;}
     if (drone->pos_y >= game.max_y) { drone->pos_y = game.max_y - 5; drone->vel_y = 0; drone->force_y = 0;}
+}
+
+void *update_drone_position_thread() {
+    while (1) {
+        //sem_wait(drone->sem);
+        update_drone_position(drone, T);
+        //sem_post(drone->sem);
+        usleep(50000);
+    }
 }
 
 void handle_key_pressed(char key, Drone *drone) {
@@ -148,7 +159,7 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    if (argc < 2) {
+    if (argc < 3) {
         LOG_TO_FILE(errors, "Invalid number of parameters");
         // Close the files
         fclose(debug);
@@ -156,7 +167,8 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
     // Converti il parametro passato in un file descriptor
-    int pipe_fd = atoi(argv[1]);
+    int map_pipe_fd = atoi(argv[1]);
+    int input_pipe_fd = atoi(argv[2]);
 
     LOG_TO_FILE(debug, "Process started");
 
@@ -184,7 +196,7 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    Drone *drone;
+    const int SIZE = 4096;
     const char *drone_shared_memory = "/drone_memory";
     int drone_mem_fd = shm_open(drone_shared_memory, O_RDWR, 0666);
     if (drone_mem_fd == -1) {
@@ -195,7 +207,7 @@ int main(int argc, char* argv[]) {
         fclose(errors);   
         exit(EXIT_FAILURE);
     }
-    drone = (Drone *)mmap(0, sizeof(drone), PROT_READ | PROT_WRITE, MAP_SHARED, drone_mem_fd, 0);
+    drone = (Drone *)mmap(0, SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, drone_mem_fd, 0);
     if (drone == MAP_FAILED) {
         perror("Map failed");
         LOG_TO_FILE(errors, "Map Failed");
@@ -212,34 +224,44 @@ int main(int argc, char* argv[]) {
     do {
         time(&finish);
         diff = difftime(finish, start);
-    } while (diff < 3);
+    } while (diff < 2);
 
     int x0 = drone->pos_x;
     int y0 = drone->pos_y;
 
     char buffer[50];
-    read(pipe_fd, buffer, sizeof(buffer) - 1);
-    sscanf(buffer, "m %d, %d", &game.max_x, &game.max_y);
+    read(map_pipe_fd, buffer, sizeof(buffer) - 1);
+    sscanf(buffer, "%d, %d", &game.max_x, &game.max_y);
     printf("[DRONE]: Received update: %d %d\n", game.max_x, game.max_y);
     
-    pid_t update = fork();
-    if (update == 0) {
-        while(1) {
-            update_drone_position(drone, T);
-            usleep(50000); 
-        }
-        exit(EXIT_SUCCESS);
+    pthread_t drone_thread;
+    if (pthread_create(&drone_thread, NULL, update_drone_position_thread, NULL) != 0) {
+        perror("pthread_create");
+        LOG_TO_FILE(errors, "Error on creating the pthread");
+        // Close the files
+        fclose(debug);
+        fclose(errors);   
+        exit(EXIT_FAILURE);
     }
+    printf("AFTER\n");
 
     fd_set read_fds;
     struct timeval timeout;
     // Aggiungiamo il file descriptor della pipe al set monitorato
-    int max_fd = pipe_fd; // Assumendo che questa sia la pipe di lettura
+    int max_fd = -1;
+    
+    if (map_pipe_fd > max_fd) {
+        max_fd = map_pipe_fd;
+    }
+    if(input_pipe_fd > max_fd) {
+        max_fd = input_pipe_fd;
+    }
     while(1) {
         FD_ZERO(&read_fds);
-        FD_SET(pipe_fd, &read_fds);
+        FD_SET(map_pipe_fd, &read_fds);
+        FD_SET(input_pipe_fd, &read_fds);
 
-        timeout.tv_sec = 10000;
+        timeout.tv_sec = 1;
         timeout.tv_usec = 0;
         int activity;
         do{
@@ -251,35 +273,26 @@ int main(int argc, char* argv[]) {
             LOG_TO_FILE(errors, "Error in select");
             break;
         } else if (activity == 0) {
-            // Timeout scaduto
-            printf("[DRONE]: No data received in the last 5 seconds.\n");
             continue;
         }
 
         // Verifica se ci sono dati da leggere sulla pipe
-        if (FD_ISSET(pipe_fd, &read_fds)) {
-            ssize_t bytes_read = read(pipe_fd, buffer, sizeof(buffer) - 1);
+        if (FD_ISSET(map_pipe_fd, &read_fds)) {
+            ssize_t bytes_read = read(map_pipe_fd, buffer, sizeof(buffer) - 1);
             if (bytes_read > 0) {
                 buffer[bytes_read] = '\0'; // Termina la stringa
-                if (buffer[0] == 'm') {
-                    // Messaggio che inizia con 'm' (aggiornamento mappa)
-                    sscanf(buffer, "m %d, %d", &game.max_x, &game.max_y);
-                    printf("[DRONE]: Mappa aggiornata a: %d x %d\n", game.max_x, game.max_y);
-                } else if (buffer[0] == 'i') {
-                    // Messaggio che inizia con 'i' (comando tastiera)
-                    char *key;
-                    sscanf(buffer, "i %s", key);
-                    printf("[DRE]: %s\n", key);
-                    //handle_key_pressed(key, drone);  // Gestisci il comando della tastiera
-                }
-            } else if (bytes_read == 0) {
-                // Pipe chiusa dall'altra estremità
-                printf("[DRONE]: Pipe closed by writer.\n");
-                break;
-            } else if (bytes_read == -1) {
-                perror("read");
-                LOG_TO_FILE(errors, "Error in reading from the pipe");
-                break;
+                sscanf(buffer, "%d, %d", &game.max_x, &game.max_y);
+                printf("[DRONE]: Received update M: %d %d\n", game.max_x, game.max_y);
+            }
+        }
+        if (FD_ISSET(input_pipe_fd, &read_fds)) {
+            ssize_t bytes_read = read(input_pipe_fd, buffer, sizeof(buffer) - 1);
+            if (bytes_read > 0) {
+                buffer[bytes_read] = '\0'; // Termina la stringa
+                printf("[DRONE]: Received update I: %s\n", buffer);
+                //sem_wait(drone->sem);
+                handle_key_pressed(buffer[0], drone);
+                //sem_post(drone->sem);
             }
         }
     }
@@ -300,7 +313,7 @@ int main(int argc, char* argv[]) {
         fclose(errors); 
         exit(EXIT_FAILURE);
     }
-    munmap(drone, sizeof(drone));
+    munmap(drone, SIZE);
     
     // Close the files
     fclose(debug);
