@@ -8,14 +8,16 @@
 #include <sys/mman.h>
 #include "helper.h"
 
-FILE *debug, *errors;           // File descriptors for the two log files
-Game *game;
+FILE *debug, *errors;   // File descriptors for the two log files
+Game game;
+int pipe_fd;            // File descriptor per la pipe
 
 void draw_outer_box() {
     attron(COLOR_PAIR(1));
     box(stdscr, 0, 0);
-    mvprintw(0, 1, "Dimension of the window: %d x %d", game->max_x, game->max_y);
+    mvprintw(0, 1, "Dimension of the window: %d x %d", game.max_x, game.max_y);
     attroff(COLOR_PAIR(1));
+    refresh();
 }
 
 void render_obstacles(Obstacle obstacles[]) {
@@ -24,12 +26,14 @@ void render_obstacles(Obstacle obstacles[]) {
         mvprintw(obstacles[i].pos_y, obstacles[i].pos_x, "#");
     }
     attroff(COLOR_PAIR(3));
+    refresh();
 }
 
 void render_drone(float x, float y) {
     attron(COLOR_PAIR(4));
     mvprintw(y, x, "+");
     attroff(COLOR_PAIR(4));
+    refresh();
 }
 
 // Resize the input window
@@ -38,8 +42,12 @@ void resize_window() {
     refresh();
     clear();
 
-    getmaxyx(stdscr, game->max_y, game->max_x);
-    resize_term(game->max_x, game->max_y);
+    getmaxyx(stdscr, game.max_y, game.max_x);
+    resize_term(game.max_y, game.max_x);
+
+    char buffer[50];
+    snprintf(buffer, sizeof(buffer), "%d, %d", game.max_x, game.max_y);
+    write(pipe_fd, buffer, strlen(buffer));
 
     clear();
     refresh();
@@ -65,7 +73,7 @@ void resize_handler(int sig, siginfo_t *info, void *context) {
     }
 }
 
-int main() {
+int main(int argc, char *argv[]) {
     debug = fopen("debug.log", "a");
     if (debug == NULL) {
         perror("fopen");
@@ -78,6 +86,17 @@ int main() {
     }
 
     LOG_TO_FILE(debug, "Process started");
+
+    if (argc < 2) {
+        LOG_TO_FILE(errors, "Invalid number of parameters");
+        // Close the files
+        fclose(debug);
+        fclose(errors); 
+        exit(EXIT_FAILURE);
+    }
+
+    // Converti il parametro passato in un file descriptor
+    pipe_fd = atoi(argv[1]);
 
     initscr(); 
     start_color();
@@ -144,42 +163,15 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    const char *game_shared_memory = "/game_memory";
-    int game_mem_fd = shm_open(game_shared_memory, O_CREAT | O_RDWR, 0666);
-    if (game_mem_fd == -1) {
-        perror("Error opening shared memory for handle the game info");
-        LOG_TO_FILE(errors, "Error in opening the shared memory");
-        // Close the files
-        fclose(debug);
-        fclose(errors);   
-        exit(EXIT_FAILURE);
-    }
-    // Set the size of the shared memory
-    if (ftruncate(game_mem_fd, sizeof(game)) == -1) {
-        perror("Error truncating shared memory for terminal dimensions");
-        LOG_TO_FILE(errors, "Error in setting the size of the shared memory");
-        // Close the files
-        fclose(debug);
-        fclose(errors);   
-        exit(EXIT_FAILURE);
-    }
-    game = (Game *)mmap(0, sizeof(game), PROT_READ | PROT_WRITE, MAP_SHARED, game_mem_fd, 0);
-    if (game == MAP_FAILED) {
-        perror("Error mapping shared memory for terminal dimensions");
-        LOG_TO_FILE(errors, "Map failed");
-        // Close the files
-        fclose(debug);
-        fclose(errors);   
-        exit(EXIT_FAILURE);
-    }
-
-    getmaxyx(stdscr, game->max_y, game->max_x);
+    getmaxyx(stdscr, game.max_y, game.max_x);
+    char buffer[50];
+    snprintf(buffer, sizeof(buffer), "%d, %d", game.max_x, game.max_y);
+    write(pipe_fd, buffer, strlen(buffer));
 
     while(1) {
         clear();
         draw_outer_box();
         render_drone(drone->pos_x, drone->pos_y);
-        refresh();
         usleep(50000);
     }
     endwin();
@@ -202,25 +194,6 @@ int main() {
         exit(EXIT_FAILURE);
     }
     munmap(drone, sizeof(drone));
-
-    // Unlink the shared memory, close the file descriptor, and unmap the shared memory region
-    if (shm_unlink(game_shared_memory) == -1) {
-        perror("Unlink shared memory");
-        LOG_TO_FILE(errors, "Error in removing the shared memory");
-        // Close the files
-        fclose(debug);
-        fclose(errors); 
-        exit(EXIT_FAILURE);
-    }
-    if (close(game_mem_fd) == -1) {
-        perror("Close file descriptor");
-        LOG_TO_FILE(errors, "Error in closing the shared memory");
-        // Close the files
-        fclose(debug);
-        fclose(errors); 
-        exit(EXIT_FAILURE);
-    }
-    munmap(game, sizeof(game));
 
     // Close the files
     fclose(debug);

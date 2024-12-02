@@ -8,6 +8,7 @@
 #include <sys/time.h>
 #include <sys/mman.h>
 #include <semaphore.h>
+#include <errno.h>
 #include "helper.h"
 
 // Number of processes
@@ -162,52 +163,18 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    if (argc < 3) {
+        LOG_TO_FILE(errors, "Invalid number of parameters");
+        // Close the files
+        fclose(debug);
+        fclose(errors); 
+        exit(EXIT_FAILURE);
+    }
+    // Converti il parametro passato in un file descriptor
+    int drone_fd = atoi(argv[1]);
+    int input_fd = atoi(argv[2]);
+
     LOG_TO_FILE(debug, "Process started");
-
-    // Open semaphore
-    sem_t *drone_sem;
-    drone_sem = sem_open("drone_sem", O_CREAT | O_RDWR, 0666, 1);
-
-    char *map_window_path[] = {"konsole", "-e", "./map_window", NULL};
-    map_pid = fork();
-    if (map_pid ==-1){
-        perror("fork");
-        LOG_TO_FILE(errors, "Error in forking the map window file");
-        exit(EXIT_FAILURE);
-    }
-    if (map_pid == 0){
-        execvp(map_window_path[0], map_window_path);
-        perror("Exec failed");
-        LOG_TO_FILE(errors, "Unable to exec the map_window process");
-        // Close the files
-        fclose(debug);
-        fclose(errors);
-        exit(EXIT_FAILURE);
-    }
-    
-    struct sigaction sa;
-    sa.sa_flags = SA_SIGINFO;
-    sa.sa_sigaction = signal_handler;
-    sigemptyset(&sa.sa_mask);
-
-    // Set the signal handler for SIGUSR1
-    if (sigaction(SIGUSR1, &sa, NULL) == -1) {
-        perror("sigaction");
-        LOG_TO_FILE(errors, "Error in sigaction(SIGURS1)");
-        // Close the files
-        fclose(debug);
-        fclose(errors);
-        exit(EXIT_FAILURE);
-    }
-    // Set the signal handler for SIGUSR2
-    if(sigaction(SIGUSR2, &sa, NULL) == -1){
-        perror("sigaction");
-        LOG_TO_FILE(errors, "Error in sigaction(SIGURS2)");
-        // Close the files
-        fclose(debug);
-        fclose(errors);
-        exit(EXIT_FAILURE);
-    }
 
     // Create the shared memory
     Drone *drone;
@@ -245,14 +212,155 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    // Open semaphore
+    sem_t *drone_sem;
+    drone_sem = sem_open("drone_sem", O_CREAT | O_RDWR, 0666, 1);
     // initial position
     sem_wait(drone_sem);
     LOG_TO_FILE(debug, "Initialized starting values");
     drone->pos_x = 10.0;
     drone->pos_y = 10.0;
+    drone->vel_x = 0.0;
+    drone->vel_y = 0.0;
+    drone->force_x = 0.0;
+    drone->force_y = 0.0;
     sem_post(drone_sem);
 
-    while (1) {}
+    // Pipe 
+    int map_pipe_fds[2];
+    if (pipe(map_pipe_fds) == -1) {
+        perror("pipe");
+        LOG_TO_FILE(errors, "Error in creating the pipe");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+
+    // Fork to create the map window process
+    char write_fd_str[10];
+    snprintf(write_fd_str, sizeof(write_fd_str), "%d", map_pipe_fds[1]);
+    char *map_window_path[] = {"konsole", "-e", "./map_window", write_fd_str, NULL};
+    map_pid = fork();
+    if (map_pid ==-1){
+        perror("fork");
+        LOG_TO_FILE(errors, "Error in forking the map window file");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+    if (map_pid == 0){
+        execvp(map_window_path[0], map_window_path);
+        perror("Exec failed");
+        LOG_TO_FILE(errors, "Unable to exec the map_window process");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+    
+    struct sigaction sa;
+    sa.sa_flags = SA_SIGINFO;
+    sa.sa_sigaction = signal_handler;
+    sigemptyset(&sa.sa_mask);
+
+    // Set the signal handler for SIGUSR1
+    if (sigaction(SIGUSR1, &sa, NULL) == -1) {
+        perror("sigaction");
+        LOG_TO_FILE(errors, "Error in sigaction(SIGURS1)");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+    // Set the signal handler for SIGUSR2
+    if(sigaction(SIGUSR2, &sa, NULL) == -1){
+        perror("sigaction");
+        LOG_TO_FILE(errors, "Error in sigaction(SIGURS2)");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+
+    char buffer[256];
+    fd_set read_fds;
+    struct timeval timeout;
+    // Aggiungiamo il file descriptor della pipe al set monitorato
+    int max_fd = -1;
+    if (map_pipe_fds[0] > max_fd) {
+        max_fd = map_pipe_fds[0];
+    }
+    if(input_fd > max_fd) {
+        max_fd = input_fd;
+    }
+    while (1) {
+        FD_ZERO(&read_fds);
+        FD_SET(map_pipe_fds[0], &read_fds);
+        FD_SET(input_fd, &read_fds);
+
+        // Timeout per select (es. 5 secondi)
+        timeout.tv_sec = 5;
+        timeout.tv_usec = 0;
+        int activity;
+        do{
+            activity = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
+        }while(activity == -1 && errno == EINTR);
+
+        if (activity < 0) {
+            perror("select");
+            LOG_TO_FILE(errors, "Error in select");
+            break;
+        } else if (activity == 0) {
+            // Timeout scaduto
+            printf("[SERVER]: No data received in the last 5 seconds.\n");
+            continue;
+        }
+
+        // Verifica se ci sono dati da leggere sulla pipe
+        if (FD_ISSET(map_pipe_fds[0], &read_fds)) {
+            ssize_t bytes_read = read(map_pipe_fds[0], buffer, sizeof(buffer) - 1);
+            if (bytes_read > 0) {
+                buffer[bytes_read] = '\0'; // Termina la stringa
+                printf("[SERVER]: Received update: %s\n", buffer);
+                char msg[30];
+                strcpy(msg, "m ");
+                strcat(msg, buffer);
+                write(drone_fd, msg, strlen(msg));
+                //write(drone_fd, buffer, strlen(buffer));
+                LOG_TO_FILE(debug, buffer);
+            } else if (bytes_read == 0) {
+                // Pipe chiusa dall'altra estremità
+                printf("[SERVER]: Pipe closed by writer.\n");
+                break;
+            } else if (bytes_read == -1) {
+                perror("read");
+                LOG_TO_FILE(errors, "Error in reading from the pipe");
+                break;
+            }
+        }
+        if (FD_ISSET(input_fd, &read_fds)) {
+            ssize_t bytes_read = read(input_fd, buffer, sizeof(buffer) - 1);
+            if (bytes_read > 0) {
+                buffer[bytes_read] = '\0'; // Termina la stringa
+                printf("[SERVER]: Received update: %c\n", (char)atoi(buffer));
+                char msg[30];
+                strcpy(msg, "i ");
+                strcat(msg, buffer);
+                write(drone_fd, msg, strlen(msg));
+                LOG_TO_FILE(debug, msg);
+            } else if (bytes_read == 0) {
+                // Pipe chiusa dall'altra estremità
+                printf("[SERVER]: Pipe closed by writer.\n");
+                break;
+            } else if (bytes_read == -1) {
+                perror("read");
+                LOG_TO_FILE(errors, "Error in reading from the pipe");
+                break;
+            }
+        }
+    }
     // Unlink the shared memory, close the file descriptor, and unmap the shared memory region
     if (shm_unlink(shared_memory) == -1) {
         perror("Unlink shared memory");

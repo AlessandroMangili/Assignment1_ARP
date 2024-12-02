@@ -93,9 +93,34 @@ int main() {
         }
     } while (!forward);
 
+    int drone_pipe_fds[2], input_pipe_fds[2];
+    if (pipe(drone_pipe_fds) == -1) {
+        perror("pipe");
+        LOG_TO_FILE(errors, "Error in creating the pipe for the server-drone");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+    if (pipe(input_pipe_fds) == -1) {
+        perror("pipe");
+        LOG_TO_FILE(errors, "Error in creating the pipe for the server-input");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+
     /* LAUNCH THE SERVER AND THE DRONE */
+    char write_drone_fd_str[10], write_input_fd_str[10];
+    char read_drone_fd_str[10], read_input_fd_str[10];
+    snprintf(write_drone_fd_str, sizeof(write_drone_fd_str), "%d", drone_pipe_fds[1]);
+    snprintf(write_input_fd_str, sizeof(write_drone_fd_str), "%d", input_pipe_fds[1]);
+    snprintf(read_drone_fd_str, sizeof(write_drone_fd_str), "%d", drone_pipe_fds[0]);
+    snprintf(read_input_fd_str, sizeof(write_drone_fd_str), "%d", input_pipe_fds[0]);
+
     pid_t pids[N_PROCS], wd;
-    char *inputs[N_PROCS - 1][2] = {{"./server", NULL}, {"./drone", NULL}};
+    char *inputs[N_PROCS - 1][4] = {{"./server", write_drone_fd_str, read_input_fd_str, NULL}, {"./drone", read_drone_fd_str, NULL}};
     for (int i = 0; i < N_PROCS - 1; i++) {
         pids[i] = fork();
         if (pids[i] < 0) {
@@ -121,7 +146,7 @@ int main() {
     /* LAUNCH THE INPUT */
     pid_t konsole;
     konsole = fork();
-    char *keyboard_input[] = {"konsole", "-e", "./keyboard_manager", NULL};
+    char *keyboard_input[] = {"konsole", "-e", "./keyboard_manager", write_input_fd_str, NULL};
     if (konsole < 0) {
         perror("Fork");
         LOG_TO_FILE(errors, "Unable to fork");

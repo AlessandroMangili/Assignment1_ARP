@@ -155,6 +155,16 @@ int main(int argc, char* argv[]) {
         perror("fopen");
         exit(EXIT_FAILURE);
     }
+
+    if (argc < 2) {
+        LOG_TO_FILE(errors, "Invalid number of parameters");
+        // Close the files
+        fclose(debug);
+        fclose(errors); 
+        exit(EXIT_FAILURE);
+    }
+    // Converti il parametro passato in un file descriptor
+    int pipe_fd = atoi(argv[1]);
     
     LOG_TO_FILE(debug, "Process started");
 
@@ -288,6 +298,9 @@ int main(int argc, char* argv[]) {
             default:
                 break;
         }
+        char buffer[10];
+        snprintf(buffer, sizeof(buffer), "%d", ch);
+        write(pipe_fd, buffer, strlen(buffer));
     }
     // Send the termination signal to the watchdog
     kill(wd_pid, SIGUSR2);

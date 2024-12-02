@@ -38,16 +38,16 @@ typedef struct {
 //typedef Info info;
 static inline __attribute__((always_inline)) void writeLog(FILE* file, char* message)
 {
-    char buffer[50];
+    char time_now[50];
     time_t log_time = time(NULL);
-    strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", localtime(&log_time));
+    strftime(time_now, sizeof(time_now), "%Y-%m-%d %H:%M:%S", localtime(&log_time));
     int lockResult = flock(fileno(file), LOCK_EX);
     if (lockResult == -1) {
         perror("Failed to lock the log file");
         exit(EXIT_FAILURE);
     }
     
-    fprintf(file,"[%s] => %s\n", buffer, message);
+    fprintf(file,"[%s] => %s\n", time_now, message);
     fflush(file);
 
     int unlockResult = flock(fileno(file), LOCK_UN);
