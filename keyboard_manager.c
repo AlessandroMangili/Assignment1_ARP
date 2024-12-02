@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/shm.h>
 #include <sys/mman.h>
+#include <pthread.h> // Include per i thread
 #include "helper.h"
 
 WINDOW *input_window, *info_window, *windows[3][3]; 
@@ -17,11 +18,13 @@ const char *symbols[3][3] = {                       // Symbols for the keyboard
     {"<", "D", ">"},
     {"/", "v", "\\"}
 };
+pthread_mutex_t drone_mutex; // Mutex per la sincronizzazione
 
 // Update the information window
 void update_info_window(Drone *drone) {
     werase(info_window);
     box(info_window, 0, 0);
+    mvwprintw(info_window, 0, 2, "Info output");
 
     int rows, cols;
     getmaxyx(stdscr, rows, cols);
@@ -43,6 +46,17 @@ void update_info_window(Drone *drone) {
     mvwprintw(info_window, middle_row + 10, middle_col - 6, "y: %.6f", drone->force_y);
     mvwprintw(info_window, middle_row + 11, middle_col - 7, "}");
     wrefresh(info_window);
+}
+
+// Funzione per aggiornare la finestra di informazioni
+
+void *update_info_thread() {
+    while (1) {
+        pthread_mutex_lock(&drone_mutex); // Lock del mutex
+        update_info_window(drone);
+        pthread_mutex_unlock(&drone_mutex); // Unlock del mutex
+        usleep(50000); // Aspetta un po' prima di aggiornare di nuovo
+    }
 }
 
 // Draw the box for the key
@@ -81,11 +95,6 @@ void create_keyboard_window(int rows, int cols) {
     mvwprintw(input_window, 0, 2, "Input manager");
     mvwprintw(input_window, rows - 2, ((cols / 2) - 30) / 2, "Press 'P' to close the program");
     wrefresh(input_window);
-    
-    box(info_window, 0, 0);
-    update_info_window(drone);
-    mvwprintw(info_window, 0, 2, "Info output");
-    wrefresh(info_window);
 }
 
 // Resize the input window
@@ -193,20 +202,41 @@ int main(int argc, char* argv[]) {
     if (sigaction(SIGWINCH, &sa, NULL) == -1) {
         perror("sigaction");
         LOG_TO_FILE(errors, "Error in sigaction(SIGWINCH)");
+        // Close the files
+        fclose(debug);
+        fclose(errors);   
         exit(EXIT_FAILURE);
     }
     // Set the signal handler for SIGUSR1
     if (sigaction(SIGUSR1, &sa, NULL) == -1) {
         perror("sigaction");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS1)");
+        // Close the files
+        fclose(debug);
+        fclose(errors);   
         exit(EXIT_FAILURE);
     }
     // Set the signal handler for SIGUSR2
     if(sigaction(SIGUSR2, &sa, NULL) == -1){
         perror("sigaction");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS2)");
+        // Close the files
+        fclose(debug);
+        fclose(errors);   
         exit(EXIT_FAILURE);
-    }    
+    }
+
+    
+    pthread_mutex_init(&drone_mutex, NULL);
+    pthread_t info_thread;
+    if (pthread_create(&info_thread, NULL, update_info_thread, NULL) != 0) {
+        perror("pthread_create");
+        LOG_TO_FILE(errors, "Error on creating the pthread");
+        // Close the files
+        fclose(debug);
+        fclose(errors);   
+        exit(EXIT_FAILURE);
+    }
 
     int ch;
     while ((ch = getch()) != 'p' && ch != 'P') {
@@ -215,55 +245,46 @@ int main(int argc, char* argv[]) {
                 handle_key_pressed(windows[0][0], symbols[0][0]);
                 drone->force_x -= 2.5;
                 drone->force_y += 2.5;
-                update_info_window(drone);
                 break;
             case 'e': case 'E':
                 handle_key_pressed(windows[0][1], symbols[0][1]);
                 drone->force_x += 0;
                 drone->force_y += 5;
-                update_info_window(drone);
                 break;
             case 'r': case 'R':
                 handle_key_pressed(windows[0][2], symbols[0][2]);
                 drone->force_x += 2.5;
                 drone->force_y += 2.5;
-                update_info_window(drone);
                 break;
             case 's': case 'S':
                 handle_key_pressed(windows[1][0], symbols[1][0]);
                 drone->force_x += -5;
                 drone->force_y += 0;
-                update_info_window(drone);
                 break;
             case 'd': case 'D':
                 handle_key_pressed(windows[1][1], symbols[1][1]);
                 drone->force_x = 0;
                 drone->force_y = 0;
-                update_info_window(drone);
                 break;
             case 'f': case 'F':
                 handle_key_pressed(windows[1][2], symbols[1][2]);
                 drone->force_x += 5;
                 drone->force_y += 0;
-                update_info_window(drone);
                 break;
             case 'x': case 'X':
                 handle_key_pressed(windows[2][0], symbols[2][0]);
                 drone->force_x += -2.5;
                 drone->force_y += -2.5;
-                update_info_window(drone);
                 break;
             case 'c': case 'C':
                 handle_key_pressed(windows[2][1], symbols[2][1]);
                 drone->force_x += 0;
                 drone->force_y += -5;
-                update_info_window(drone);
                 break;
             case 'v': case 'V':
                 handle_key_pressed(windows[2][2], symbols[2][2]);
                 drone->force_x += 2.5;
                 drone->force_y += -2.5;
-                update_info_window(drone);
                 break;
             default:
                 break;
@@ -271,6 +292,10 @@ int main(int argc, char* argv[]) {
     }
     // Send the termination signal to the watchdog
     kill(wd_pid, SIGUSR2);
+
+    // Al termine del programma, unisci il thread e distruggi il mutex
+    pthread_join(info_thread, NULL);
+    pthread_mutex_destroy(&drone_mutex);
 
     // Clear the windows
     for (int i = 0; i < 3; i++) {

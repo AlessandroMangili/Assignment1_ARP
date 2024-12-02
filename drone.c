@@ -155,6 +155,7 @@ int main(int argc, char* argv[]) {
 
     while(1) {
         update_drone_position(drone, T);
+        usleep(50000); 
     }
 
     if (shm_unlink(shared_memory) == -1) { // Remove shared memory segment.
