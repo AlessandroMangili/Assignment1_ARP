@@ -17,7 +17,7 @@ void get_current_time(char *buffer, int len) {
     time_t now = time(NULL);
     strftime(buffer, len, "%Y-%m-%d %H:%M:%S", localtime(&now));
 }
-
+// Kill all processes
 void kill_processes() {
     for (int i = 0; i < N_PROCS; i++) {
         if (kill(pids[i], SIGUSR2) == -1) {

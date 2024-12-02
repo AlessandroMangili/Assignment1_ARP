@@ -135,7 +135,6 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
         LOG_TO_FILE(debug, "Signal SIGUSR1 received from WATCHDOG");
         kill(wd_pid, SIGUSR1);
     }
-
     if (sig == SIGUSR2) {
         LOG_TO_FILE(debug, "Shutting down by the WATCHDOG");
         if (kill(map_pid, SIGTERM) == -1) {
@@ -165,9 +164,9 @@ int main(int argc, char *argv[]) {
 
     LOG_TO_FILE(debug, "Process started");
 
-    // OPENING SEMAPHORES
-    sem_t *drone_sem;   // semaphore for writing and reading drone
-    drone_sem = sem_open("drone_sem", O_CREAT | O_RDWR, 0666, 1);    // Initial value: 1
+    // Open semaphore
+    sem_t *drone_sem;
+    drone_sem = sem_open("drone_sem", O_CREAT | O_RDWR, 0666, 1);
 
     char *map_window_path[] = {"konsole", "-e", "./map_window", NULL};
     map_pid = fork();
@@ -210,14 +209,13 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    // SHARED MEMORY INITIALIZATION AND MAPPING
+    // Create the shared memory
     Drone *drone;
-    const char *shared_memory = "/drone_memory"; //name of the shm
-    const int SIZE = 4096; //size of the shared memory
-    
+    const char *shared_memory = "/drone_memory";
+    const int SIZE = 4096;    
     int i, mem_fd;
-    mem_fd = shm_open(shared_memory, O_CREAT | O_RDWR, 0666);    //generates shared memory for reading and writing
-    if (mem_fd == -1) { //if there are errors generating shared memory
+    mem_fd = shm_open(shared_memory, O_CREAT | O_RDWR, 0666);
+    if (mem_fd == -1) {
         perror("Opening the shared memory \n");
         LOG_TO_FILE(errors, "Error in opening the shared memory");
         // Close the files
@@ -227,17 +225,23 @@ int main(int argc, char *argv[]) {
     } else {
         LOG_TO_FILE(debug, "Opened the shared memory");
     }
-
+    // Set the size of the shared memory
     if(ftruncate(mem_fd, SIZE) == -1){
         perror("Setting the size of the shared memory");
         LOG_TO_FILE(errors, "Error in setting the size of the shared memory");
+        // Close the files
+        fclose(debug);
+        fclose(errors);   
         exit(EXIT_FAILURE);
-    } //set the size of shm_fd
-
-    drone = (Drone * )mmap(0, SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd, 0); // maps the shared memory object into the server's adress space
-    if (drone == MAP_FAILED) {    // if there are errors in mapping
+    }
+    // Map the shared memory into a drone objects
+    drone = (Drone * )mmap(0, SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd, 0);
+    if (drone == MAP_FAILED) {
         perror("Map failed\n");
         LOG_TO_FILE(errors, "Map failed");
+        // Close the files
+        fclose(debug);
+        fclose(errors);   
         exit(EXIT_FAILURE);
     }
 
@@ -248,9 +252,8 @@ int main(int argc, char *argv[]) {
     drone->pos_y = 10.0;
     sem_post(drone_sem);
 
-    while (1) {
-        
-    }
+    while (1) {}
+    // Unlink the shared memory, close the file descriptor, and unmap the shared memory region
     if (shm_unlink(shared_memory) == -1) {
         perror("Unlink shared memory");
         LOG_TO_FILE(errors, "Error in removing the shared memory");

@@ -31,6 +31,10 @@ typedef struct {
     float pos_x, pos_y;
 } Obstacle;
 
+typedef struct {
+    int max_x, max_y;
+} Game;
+
 //typedef Info info;
 static inline __attribute__((always_inline)) void writeLog(FILE* file, char* message)
 {

@@ -18,13 +18,13 @@ const char *symbols[3][3] = {                       // Symbols for the keyboard
     {"<", "D", ">"},
     {"/", "v", "\\"}
 };
-pthread_mutex_t drone_mutex; // Mutex per la sincronizzazione
+pthread_mutex_t info_window_mutex;                  // Mutex for synchronizing ncurses
 
 // Update the information window
 void update_info_window(Drone *drone) {
     werase(info_window);
     box(info_window, 0, 0);
-    mvwprintw(info_window, 0, 2, "Info output");
+    mvwprintw(info_window, 0, 2, "Info display");
 
     int rows, cols;
     getmaxyx(stdscr, rows, cols);
@@ -48,14 +48,13 @@ void update_info_window(Drone *drone) {
     wrefresh(info_window);
 }
 
-// Funzione per aggiornare la finestra di informazioni
-
+// Continuously update the information window"
 void *update_info_thread() {
     while (1) {
-        pthread_mutex_lock(&drone_mutex); // Lock del mutex
+        pthread_mutex_lock(&info_window_mutex);
         update_info_window(drone);
-        pthread_mutex_unlock(&drone_mutex); // Unlock del mutex
-        usleep(50000); // Aspetta un po' prima di aggiornare di nuovo
+        pthread_mutex_unlock(&info_window_mutex);
+        usleep(50000);
     }
 }
 
@@ -73,9 +72,11 @@ void handle_key_pressed(WINDOW *win, const char *symbol) {
     wrefresh(win);
     usleep(200000);
     wattroff(win, COLOR_PAIR(2));
-    draw_box(win, symbol);
+    mvwprintw(win, 1, 2, "%s", symbol);
+    wrefresh(win);
 }
 
+// Create the two windows and draw the keyboard
 void create_keyboard_window(int rows, int cols) {
     input_window = newwin(rows, cols / 2, 0, 0);
     info_window = newwin(rows, cols / 2, 0, cols / 2);
@@ -100,6 +101,7 @@ void create_keyboard_window(int rows, int cols) {
 // Resize the input window
 void resize_windows() {
     endwin();
+
     refresh();
     clear();
 
@@ -123,7 +125,6 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
         LOG_TO_FILE(debug, "Signal SIGUSR1 received from WATCHDOG");
         kill(wd_pid, SIGUSR1);
     }
-    
     if (sig == SIGUSR2){
         LOG_TO_FILE(debug, "Shutting down by the WATCHDOG");
         // Close the files
@@ -157,10 +158,11 @@ int main(int argc, char* argv[]) {
     
     LOG_TO_FILE(debug, "Process started");
 
+    // Open the shared memory
     const char *shared_memory = "/drone_memory";
     const int SIZE = 4096;
     int i, mem_fd;
-    mem_fd = shm_open(shared_memory, O_RDWR, 0666); // open shared memory segment for read and write
+    mem_fd = shm_open(shared_memory, O_RDWR, 0666);
     if (mem_fd == -1) {
         perror("Opening the shared memory \n");
         LOG_TO_FILE(errors, "Error in opening the shared memory");
@@ -169,8 +171,7 @@ int main(int argc, char* argv[]) {
         fclose(errors);   
         exit(EXIT_FAILURE);
     }
-
-    drone = (Drone *)mmap(0, SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd, 0); // protocol write
+    drone = (Drone *)mmap(0, SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd, 0);
     if (drone == MAP_FAILED) {
         perror("Map failed");
         LOG_TO_FILE(errors, "Map Failed");
@@ -186,7 +187,6 @@ int main(int argc, char* argv[]) {
     noecho();
     curs_set(0);
 
-    // Inizializza i colori
     init_pair(1, COLOR_WHITE, COLOR_BLACK);
     init_pair(2, COLOR_BLACK, COLOR_GREEN);
 
@@ -225,9 +225,8 @@ int main(int argc, char* argv[]) {
         fclose(errors);   
         exit(EXIT_FAILURE);
     }
-
-    
-    pthread_mutex_init(&drone_mutex, NULL);
+    // Initialize and create the thread to continuously update the information window
+    pthread_mutex_init(&info_window_mutex, NULL);
     pthread_t info_thread;
     if (pthread_create(&info_thread, NULL, update_info_thread, NULL) != 0) {
         perror("pthread_create");
@@ -293,9 +292,9 @@ int main(int argc, char* argv[]) {
     // Send the termination signal to the watchdog
     kill(wd_pid, SIGUSR2);
 
-    // Al termine del programma, unisci il thread e distruggi il mutex
+    // Join the thread and destroy the mutex
     pthread_join(info_thread, NULL);
-    pthread_mutex_destroy(&drone_mutex);
+    pthread_mutex_destroy(&info_window_mutex);
 
     // Clear the windows
     for (int i = 0; i < 3; i++) {
@@ -307,6 +306,7 @@ int main(int argc, char* argv[]) {
     delwin(info_window);
     endwin();
 
+    // Unlink the shared memory, close the file descriptor, and unmap the shared memory region
     if (shm_unlink(shared_memory) == -1) {
         perror("Unlink shared memory");
         LOG_TO_FILE(errors, "Error in removing the shared memory");
