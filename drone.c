@@ -91,19 +91,19 @@ void *update_drone_position_thread() {
 void handle_key_pressed(char key, Drone *drone) {
     switch (key) {
         case 'w': case 'W':
-            drone->force_x += -0.5;
-            drone->force_y += 0.5;
+            drone->force_x -= 0.25;
+            drone->force_y -= 0.25;
             break;
         case 'e': case 'E':
-            drone->force_x += 0;
-            drone->force_y += 0.5;
+            drone->force_x -= 0;
+            drone->force_y -= 0.5;
             break;
         case 'r': case 'R':
-            drone->force_x += 0.5;
-            drone->force_y += 0.5;
+            drone->force_x += 0.25;
+            drone->force_y -= 0.25;
             break;
         case 's': case 'S':
-            drone->force_x += -0.5;
+            drone->force_x -= 0.5;
             drone->force_y += 0;
             break;
         case 'd': case 'D':
@@ -115,16 +115,16 @@ void handle_key_pressed(char key, Drone *drone) {
             drone->force_y += 0;
             break;
         case 'x': case 'X':
-            drone->force_x += -0.5;
-            drone->force_y += -0.5;
+            drone->force_x -= 0.25;
+            drone->force_y += 0.25;
             break;
         case 'c': case 'C':
             drone->force_x += 0;
-            drone->force_y += -0.5;
+            drone->force_y += 0.5;
             break;
         case 'v': case 'V':
-            drone->force_x += 0.5;
-            drone->force_y += -0.5;
+            drone->force_x += 0.25;
+            drone->force_y += 0.25;
             break;
         default:
             break;
