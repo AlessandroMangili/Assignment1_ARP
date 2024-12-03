@@ -48,7 +48,7 @@ void update_info_window() {
     wrefresh(info_window);
 }
 
-// Continuously update the information window"
+// Routine for continuously updating the information window
 void *update_info_thread() {
     while (1) {
         pthread_mutex_lock(&info_window_mutex);
@@ -127,10 +127,7 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
     }
     if (sig == SIGUSR2){
         LOG_TO_FILE(debug, "Shutting down by the WATCHDOG");
-        // Close the files
-        fclose(errors);
-        fclose(debug);
-        // Clear the windows
+
         for (int i = 0; i < 3; i++) {
             for (int j = 0; j < 3; j++) {
                 delwin(windows[i][j]);
@@ -139,20 +136,56 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
         delwin(input_window);
         delwin(info_window);
         endwin();
+
+        // Close the files
+        fclose(errors);
+        fclose(debug);
+
         exit(EXIT_FAILURE);
     }
 }
 
+int open_shared_memory() {
+    int mem_fd = shm_open(DRONE_SHARED_MEMORY, O_RDONLY, 0666);
+    if (mem_fd == -1) {
+        perror("Error opening the shared memory");
+        LOG_TO_FILE(errors, "Error opening the shared memory");
+        // Close the files
+        fclose(debug);
+        fclose(errors);   
+        exit(EXIT_FAILURE);
+    }
+    drone = (Drone *)mmap(0, sizeof(Drone), PROT_READ, MAP_SHARED, mem_fd, 0);
+    if (drone == MAP_FAILED) {
+        perror("Error mapping the shared memory");
+        LOG_TO_FILE(errors, "Error mapping the shared memory");
+        // Close the files
+        fclose(debug);
+        fclose(errors);   
+        exit(EXIT_FAILURE);
+    }
+    return mem_fd;
+}
+
+void keyboard_manager(int server_write_fd) {
+    int ch;
+    while ((ch = getch()) != 'p' && ch != 'P') {
+        if (ch != EOF) {
+            write(server_write_fd, &ch, sizeof(ch));
+        }
+    }
+}
+
 int main(int argc, char* argv[]) {
-    int rows, cols;
+    /* OPEN THE LOG FILES */
     debug = fopen("debug.log", "a");
     if (debug == NULL) {
-        perror("fopen");
+        perror("Error opening the debug file");
         exit(EXIT_FAILURE);
     }
     errors = fopen("errors.log", "a");
     if (errors == NULL) {
-        perror("fopen");
+        perror("Error opening the errors file");
         exit(EXIT_FAILURE);
     }
 
@@ -163,34 +196,16 @@ int main(int argc, char* argv[]) {
         fclose(errors); 
         exit(EXIT_FAILURE);
     }
-    // Converti il parametro passato in un file descriptor
-    int pipe_fd = atoi(argv[1]);
-    
+
     LOG_TO_FILE(debug, "Process started");
 
-    // Open the shared memory
-    const int SIZE = 4096;
-    const char *shared_memory = "/drone_memory";
-    int i, mem_fd;
-    mem_fd = shm_open(shared_memory, O_RDONLY, 0666);
-    if (mem_fd == -1) {
-        perror("Opening the shared memory \n");
-        LOG_TO_FILE(errors, "Error in opening the shared memory");
-        // Close the files
-        fclose(debug);
-        fclose(errors);   
-        exit(EXIT_FAILURE);
-    }
-    drone = (Drone *)mmap(0, SIZE, PROT_READ, MAP_SHARED, mem_fd, 0);
-    if (drone == MAP_FAILED) {
-        perror("Map failed");
-        LOG_TO_FILE(errors, "Map Failed");
-        // Close the files
-        fclose(debug);
-        fclose(errors);   
-        exit(EXIT_FAILURE);
-    }
+    /* SETUP THE PIPE */
+    int server_write_fd = atoi(argv[1]);
 
+    /* OPEN SHARED MEMORY */
+    int mem_fd = open_shared_memory();
+
+    /* SETUP NCURSE */
     initscr();
     start_color();
     cbreak();
@@ -200,9 +215,11 @@ int main(int argc, char* argv[]) {
     init_pair(1, COLOR_WHITE, COLOR_BLACK);
     init_pair(2, COLOR_BLACK, COLOR_GREEN);
 
+    int rows, cols;
     getmaxyx(stdscr, rows, cols);
     create_keyboard_window(rows, cols);
 
+    /* SETUP SIGNALS */
     struct sigaction sa;
     sa.sa_flags = SA_SIGINFO;
     sa.sa_sigaction = signal_handler;
@@ -210,7 +227,7 @@ int main(int argc, char* argv[]) {
 
     // Set the signal handler for SIGWINCH
     if (sigaction(SIGWINCH, &sa, NULL) == -1) {
-        perror("sigaction");
+        perror("Error in sigaction(SIGWINCH)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGWINCH)");
         // Close the files
         fclose(debug);
@@ -219,7 +236,7 @@ int main(int argc, char* argv[]) {
     }
     // Set the signal handler for SIGUSR1
     if (sigaction(SIGUSR1, &sa, NULL) == -1) {
-        perror("sigaction");
+        perror("Error in sigaction(SIGURS1)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS1)");
         // Close the files
         fclose(debug);
@@ -228,31 +245,31 @@ int main(int argc, char* argv[]) {
     }
     // Set the signal handler for SIGUSR2
     if(sigaction(SIGUSR2, &sa, NULL) == -1){
-        perror("sigaction");
+        perror("rror in sigaction(SIGURS2)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS2)");
         // Close the files
         fclose(debug);
         fclose(errors);   
         exit(EXIT_FAILURE);
     }
+    
+    /* START THREAD */
     // Initialize and create the thread to continuously update the information window
     pthread_mutex_init(&info_window_mutex, NULL);
     pthread_t info_thread;
     if (pthread_create(&info_thread, NULL, update_info_thread, NULL) != 0) {
-        perror("pthread_create");
-        LOG_TO_FILE(errors, "Error on creating the pthread");
+        perror("Error creating the thread for update the info window");
+        LOG_TO_FILE(errors, "Error creating the thread for update the info window");
         // Close the files
         fclose(debug);
         fclose(errors);   
         exit(EXIT_FAILURE);
     }
 
-    int ch;
-    while ((ch = getch()) != 'p' && ch != 'P') {
-        if (ch != EOF) {
-            write(pipe_fd, &ch, sizeof(ch));
-        }
-    }
+    /* LAUNCH THE INPUT PROCESS */
+    keyboard_manager(server_write_fd);
+
+    /* END PROGRAM */
     // Send the termination signal to the watchdog
     kill(wd_pid, SIGUSR2);
 
@@ -260,7 +277,7 @@ int main(int argc, char* argv[]) {
     pthread_join(info_thread, NULL);
     pthread_mutex_destroy(&info_window_mutex);
 
-    // Clear the windows
+    // Delete all the windows
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 3; j++) {
             delwin(windows[i][j]);
@@ -270,8 +287,8 @@ int main(int argc, char* argv[]) {
     delwin(info_window);
     endwin();
 
-    // Unlink the shared memory, close the file descriptor, and unmap the shared memory region
-    if (shm_unlink(shared_memory) == -1) {
+    // Unlink the shared memory
+    if (shm_unlink(DRONE_SHARED_MEMORY) == -1) {
         perror("Unlink shared memory");
         LOG_TO_FILE(errors, "Error in removing the shared memory");
         // Close the files
@@ -279,6 +296,7 @@ int main(int argc, char* argv[]) {
         fclose(errors); 
         exit(EXIT_FAILURE);
     }
+    // Close the file descriptor
     if (close(mem_fd) == -1) {
         perror("Close file descriptor");
         LOG_TO_FILE(errors, "Error in closing the shared memory");
@@ -287,7 +305,8 @@ int main(int argc, char* argv[]) {
         fclose(errors); 
         exit(EXIT_FAILURE);
     }
-    munmap(drone, SIZE);
+    // Unmap the shared memory region
+    munmap(drone, sizeof(Drone));
 
     // Close the files
     fclose(debug);

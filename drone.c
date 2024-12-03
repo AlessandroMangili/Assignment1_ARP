@@ -74,9 +74,9 @@ void update_drone_position(Drone *drone, float dt) {
     drone->pos_y += drone->vel_y * dt + 0.5 * accelerationY * dt * dt;
 
     if (drone->pos_x < 0) { drone->pos_x = 0; drone->vel_x = 0; drone->force_x = 0;}
-    if (drone->pos_x >= game.max_x) { drone->pos_x = game.max_x - 5; drone->vel_x = 0; drone->force_x = 0;}
+    if (drone->pos_x >= game.max_x) { drone->pos_x = game.max_x - 1; drone->vel_x = 0; drone->force_x = 0;}
     if (drone->pos_y < 0) {drone->pos_y = 0; drone->vel_y = 0; drone->force_y = 0;}
-    if (drone->pos_y >= game.max_y) { drone->pos_y = game.max_y - 5; drone->vel_y = 0; drone->force_y = 0;}
+    if (drone->pos_y >= game.max_y) { drone->pos_y = game.max_y - 1; drone->vel_y = 0; drone->force_y = 0;}
 }
 
 void *update_drone_position_thread() {
@@ -147,15 +147,89 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
     }
 }
 
+int open_shared_memory() {
+    int mem_fd = shm_open(DRONE_SHARED_MEMORY, O_RDWR, 0666);
+    if (mem_fd == -1) {
+        perror("Error opening the shared memory");
+        LOG_TO_FILE(errors, "Error opening the shared memory");
+        // Close the files
+        fclose(debug);
+        fclose(errors);   
+        exit(EXIT_FAILURE);
+    }
+    drone = (Drone *)mmap(0, sizeof(Drone), PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd, 0);
+    if (drone == MAP_FAILED) {
+        perror("Error mapping the shared memory");
+        LOG_TO_FILE(errors, "Error mapping the shared memoryd");
+        // Close the files
+        fclose(debug);
+        fclose(errors);   
+        exit(EXIT_FAILURE);
+    }
+    return mem_fd;
+}
+
+void drone_process(int map_read_fd, int input_read_fd) {
+    char buffer[256];
+    fd_set read_fds;
+    struct timeval timeout;
+
+    int max_fd = -1;
+    if (map_read_fd > max_fd) {
+        max_fd = map_read_fd;
+    }
+    if(input_read_fd > max_fd) {
+        max_fd = input_read_fd;
+    }
+
+    while(1) {
+        FD_ZERO(&read_fds);
+        FD_SET(map_read_fd, &read_fds);
+        FD_SET(input_read_fd, &read_fds);
+
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
+        int activity;
+        do {
+            activity = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
+        } while(activity == -1 && errno == EINTR);
+
+        if (activity < 0) {
+            perror("Error in the drone's select");
+            LOG_TO_FILE(errors, "Error in select which pipe reads");
+            break;
+        } else if (activity > 0) {
+            if (FD_ISSET(map_read_fd, &read_fds)) {
+                ssize_t bytes_read = read(map_read_fd, buffer, sizeof(buffer) - 1);
+                if (bytes_read > 0) {
+                    buffer[bytes_read] = '\0';
+                    sscanf(buffer, "%d, %d", &game.max_x, &game.max_y);
+                    printf("[DRONE]: Received update M: %d %d\n", game.max_x, game.max_y); // Da togliere
+                }
+            }
+            if (FD_ISSET(input_read_fd, &read_fds)) {
+                ssize_t bytes_read = read(input_read_fd, buffer, sizeof(buffer) - 1);
+                if (bytes_read > 0) {
+                    buffer[bytes_read] = '\0';
+                    //sem_wait(drone->sem);
+                    handle_key_pressed(buffer[0], drone);
+                    //sem_post(drone->sem);
+                }
+            }
+        }
+    }
+}
+
 int main(int argc, char* argv[]) {
+    /* OPEN THE LOG FILES */
     debug = fopen("debug.log", "a");
     if (debug == NULL) {
-        perror("fopen");
+        perror("Error opening the debug file");
         exit(EXIT_FAILURE);
     }
     errors = fopen("errors.log", "a");
     if (errors == NULL) {
-        perror("fopen");
+        perror("Error opening the errors file");
         exit(EXIT_FAILURE);
     }
 
@@ -166,12 +240,14 @@ int main(int argc, char* argv[]) {
         fclose(errors); 
         exit(EXIT_FAILURE);
     }
-    // Converti il parametro passato in un file descriptor
-    int map_pipe_fd = atoi(argv[1]);
-    int input_pipe_fd = atoi(argv[2]);
-
+    
     LOG_TO_FILE(debug, "Process started");
 
+    /* SETUP THE PIPES */
+    int map_read_fd = atoi(argv[1]);
+    int input_read_fd = atoi(argv[2]);
+
+    /* SETUP THE SIGNALS */
     struct sigaction sa;
     sa.sa_flags = SA_SIGINFO;
     sa.sa_sigaction = signal_handler;
@@ -179,7 +255,7 @@ int main(int argc, char* argv[]) {
 
     // Set the signal handler for SIGUSR1
     if (sigaction(SIGUSR1, &sa, NULL) == -1) {
-        perror("sigaction");
+        perror("Error in sigaction(SIGURS1)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS1)");
         // Close the files
         fclose(debug);
@@ -188,7 +264,7 @@ int main(int argc, char* argv[]) {
     }
     // Set the signal handler for SIGUSR2
     if(sigaction(SIGUSR2, &sa, NULL) == -1){
-        perror("sigaction");
+        perror("Error in sigaction(SIGURS2)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS2)");
         // Close the files
         fclose(debug);
@@ -196,28 +272,11 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    const int SIZE = 4096;
-    const char *drone_shared_memory = "/drone_memory";
-    int drone_mem_fd = shm_open(drone_shared_memory, O_RDWR, 0666);
-    if (drone_mem_fd == -1) {
-        perror("Opening the shared memory");
-        LOG_TO_FILE(errors, "Error in opening the shared memory");
-        // Close the files
-        fclose(debug);
-        fclose(errors);   
-        exit(EXIT_FAILURE);
-    }
-    drone = (Drone *)mmap(0, SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, drone_mem_fd, 0);
-    if (drone == MAP_FAILED) {
-        perror("Map failed");
-        LOG_TO_FILE(errors, "Map Failed");
-        // Close the files
-        fclose(debug);
-        fclose(errors);   
-        exit(EXIT_FAILURE);
-    }
+    /* OPEN THE SHARED MEMORY */
+    int mem_fd = open_shared_memory();
 
-    //import drone initial position from the server
+    /* IMPORT THE INITIAL CONFIGURATION */
+    // Wait 2 seconds
     int diff;
     time_t start, finish;
     time(&start);
@@ -226,78 +285,30 @@ int main(int argc, char* argv[]) {
         diff = difftime(finish, start);
     } while (diff < 2);
 
-    int x0 = drone->pos_x;
-    int y0 = drone->pos_y;
-
+    // Read the size of the map from the server
     char buffer[50];
-    read(map_pipe_fd, buffer, sizeof(buffer) - 1);
+    read(map_read_fd, buffer, sizeof(buffer) - 1);
     sscanf(buffer, "%d, %d", &game.max_x, &game.max_y);
     printf("[DRONE]: Received update: %d %d\n", game.max_x, game.max_y);
     
+    /* UPDATE THE DRONE POSITION */
+    // Start the thread to continuously update the drone's information
     pthread_t drone_thread;
     if (pthread_create(&drone_thread, NULL, update_drone_position_thread, NULL) != 0) {
-        perror("pthread_create");
-        LOG_TO_FILE(errors, "Error on creating the pthread");
+        perror("Error creating the thread for updating the drone's information");
+        LOG_TO_FILE(errors, "Error creating the thread for updating the drone's information");
         // Close the files
         fclose(debug);
         fclose(errors);   
         exit(EXIT_FAILURE);
     }
-    printf("AFTER\n");
 
-    fd_set read_fds;
-    struct timeval timeout;
-    // Aggiungiamo il file descriptor della pipe al set monitorato
-    int max_fd = -1;
-    
-    if (map_pipe_fd > max_fd) {
-        max_fd = map_pipe_fd;
-    }
-    if(input_pipe_fd > max_fd) {
-        max_fd = input_pipe_fd;
-    }
-    while(1) {
-        FD_ZERO(&read_fds);
-        FD_SET(map_pipe_fd, &read_fds);
-        FD_SET(input_pipe_fd, &read_fds);
+    /* LAUNCH THE DRONE */
+    drone_process(map_read_fd, input_read_fd);
 
-        timeout.tv_sec = 1;
-        timeout.tv_usec = 0;
-        int activity;
-        do{
-            activity = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
-        }while(activity == -1 && errno == EINTR);
-
-        if (activity < 0) {
-            perror("select");
-            LOG_TO_FILE(errors, "Error in select");
-            break;
-        } else if (activity == 0) {
-            continue;
-        }
-
-        // Verifica se ci sono dati da leggere sulla pipe
-        if (FD_ISSET(map_pipe_fd, &read_fds)) {
-            ssize_t bytes_read = read(map_pipe_fd, buffer, sizeof(buffer) - 1);
-            if (bytes_read > 0) {
-                buffer[bytes_read] = '\0'; // Termina la stringa
-                sscanf(buffer, "%d, %d", &game.max_x, &game.max_y);
-                printf("[DRONE]: Received update M: %d %d\n", game.max_x, game.max_y);
-            }
-        }
-        if (FD_ISSET(input_pipe_fd, &read_fds)) {
-            ssize_t bytes_read = read(input_pipe_fd, buffer, sizeof(buffer) - 1);
-            if (bytes_read > 0) {
-                buffer[bytes_read] = '\0'; // Termina la stringa
-                printf("[DRONE]: Received update I: %s\n", buffer);
-                //sem_wait(drone->sem);
-                handle_key_pressed(buffer[0], drone);
-                //sem_post(drone->sem);
-            }
-        }
-    }
-    // Unlink the shared memory, close the file descriptor, and unmap the shared memory region
-    if (shm_unlink(drone_shared_memory) == -1) {
+    /* END PROGRAM */
+    // Unlink the shared memory
+    if (shm_unlink(DRONE_SHARED_MEMORY) == -1) {
         perror("Unlink shared memory");
         LOG_TO_FILE(errors, "Error in removing the shared memory");
         // Close the files
@@ -305,7 +316,8 @@ int main(int argc, char* argv[]) {
         fclose(errors); 
         exit(EXIT_FAILURE);
     }
-    if (close(drone_mem_fd) == -1) {
+    // Close the file descriptor
+    if (close(mem_fd) == -1) {
         perror("Close file descriptor");
         LOG_TO_FILE(errors, "Error in closing the shared memory");
         // Close the files
@@ -313,7 +325,8 @@ int main(int argc, char* argv[]) {
         fclose(errors); 
         exit(EXIT_FAILURE);
     }
-    munmap(drone, SIZE);
+    // Unmap the shared memory region
+    munmap(drone, sizeof(Drone));
     
     // Close the files
     fclose(debug);

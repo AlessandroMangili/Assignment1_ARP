@@ -14,6 +14,8 @@
 #define TIMEOUT 10      // Number of seconds after which, if a process does not respond, the watchdog terminates all the processes
 #define N_PROCS 3       // Number of processes of the watchdog
 
+#define DRONE_SHARED_MEMORY "/drone_memory"
+
 #define MASS 2    
 #define FRICTION_COEFFICIENT 0.5   
 #define FORCE_MODULE 1.0 

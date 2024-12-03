@@ -31,18 +31,19 @@ int get_konsole_child(pid_t konsole) {
 }
 
 int main() {
+    /* OPEN THE LOG FILES */
     debug = fopen("debug.log", "a");
     if (debug == NULL) {
-        perror("fopen");
+        perror("Error opening the debug file");
         exit(EXIT_FAILURE);
     }
     errors = fopen("errors.log", "a");
     if (errors == NULL) {
-        perror("fopen");
+        perror("Error opening the errors file");
         exit(EXIT_FAILURE);
     }
 
-    /* INTRO */
+    /*  INTRODUCTION */
     char key;
     bool forward = false;
     printf("\n\n\t\t   In this thrilling drone control challenge, you’ll need to navigate\n");
@@ -93,58 +94,59 @@ int main() {
         }
     } while (!forward);
 
-    int drone_pipe_fds[2], drone2_pipe_fds[2], input_pipe_fds[2];
-    if (pipe(drone_pipe_fds) == -1) {
-        perror("pipe");
-        LOG_TO_FILE(errors, "Error in creating the pipe for the server-drone");
+    /* CREATE ALL THE PIPES */
+    int drone_map_fds[2], drone_key_fds[2], input_pipe_fds[2];
+    if (pipe(drone_map_fds) == -1) {
+        perror("Error creating the pipe for the drone");
+        LOG_TO_FILE(errors, "Error creating the pipe for the drone-map");
         // Close the files
         fclose(debug);
         fclose(errors);
         exit(EXIT_FAILURE);
     }
-    if (pipe(drone2_pipe_fds) == -1) {
-        perror("pipe");
-        LOG_TO_FILE(errors, "Error in creating the pipe for the server-drone");
+    if (pipe(drone_key_fds) == -1) {
+        perror("Error creating the pipe for the drone");
+        LOG_TO_FILE(errors, "Error creating the pipe for the drone-key");
         // Close the files
         fclose(debug);
         fclose(errors);
         exit(EXIT_FAILURE);
     }
     if (pipe(input_pipe_fds) == -1) {
-        perror("pipe");
-        LOG_TO_FILE(errors, "Error in creating the pipe for the server-input");
+        perror("Error creating the pipe for the input");
+        LOG_TO_FILE(errors, "Error creating the pipe for the input");
         // Close the files
         fclose(debug);
         fclose(errors);
         exit(EXIT_FAILURE);
     }
 
-    /* LAUNCH THE SERVER AND THE DRONE */
-    char write_drone_fd_str[10], write_drone2_fd_str[10], write_input_fd_str[10];
-    char read_drone_fd_str[10], read_drone2_fd_str[10], read_input_fd_str[10];
-    snprintf(write_drone_fd_str, sizeof(write_drone_fd_str), "%d", drone_pipe_fds[1]);
-    snprintf(write_drone2_fd_str, sizeof(write_drone2_fd_str), "%d", drone2_pipe_fds[1]);
-    snprintf(write_input_fd_str, sizeof(write_drone_fd_str), "%d", input_pipe_fds[1]);
-    snprintf(read_drone_fd_str, sizeof(read_drone_fd_str), "%d", drone_pipe_fds[0]);
-    snprintf(read_drone2_fd_str, sizeof(read_drone2_fd_str), "%d", drone2_pipe_fds[0]);
-    snprintf(read_input_fd_str, sizeof(read_drone_fd_str), "%d", input_pipe_fds[0]);
+    /* CONVERT INTO STRING ALL THE FILE DESCRIPTOR */
+    char drone_write_map_fd_str[10], drone_write_key_fd_str[10], input_write_fd_str[10];
+    char drone_read_map_fd_str[10], drone_read_key_fd_str[10], input_read_fd_str[10];
+    snprintf(drone_write_map_fd_str, sizeof(drone_write_map_fd_str), "%d", drone_map_fds[1]);
+    snprintf(drone_write_key_fd_str, sizeof(drone_write_key_fd_str), "%d", drone_key_fds[1]);
+    snprintf(input_write_fd_str, sizeof(drone_write_map_fd_str), "%d", input_pipe_fds[1]);
+    snprintf(drone_read_map_fd_str, sizeof(drone_read_map_fd_str), "%d", drone_map_fds[0]);
+    snprintf(drone_read_key_fd_str, sizeof(drone_read_key_fd_str), "%d", drone_key_fds[0]);
+    snprintf(input_read_fd_str, sizeof(drone_read_map_fd_str), "%d", input_pipe_fds[0]);
 
+    /* LAUNCH THE SERVER AND THE DRONE */
     pid_t pids[N_PROCS], wd;
-    char *inputs[N_PROCS - 1][5] = {{"./server", write_drone_fd_str, write_drone2_fd_str, read_input_fd_str, NULL}, {"./drone", read_drone_fd_str, read_drone2_fd_str, NULL}};
+    char *inputs[N_PROCS - 1][5] = {{"./server", drone_write_map_fd_str, drone_write_key_fd_str, input_read_fd_str, NULL}, {"./drone", drone_read_map_fd_str, drone_read_key_fd_str, NULL}};
     for (int i = 0; i < N_PROCS - 1; i++) {
         pids[i] = fork();
         if (pids[i] < 0) {
-            perror("Fork");
-            LOG_TO_FILE(errors, "Unable to fork");
+            perror("Error forking");
+            LOG_TO_FILE(errors, "Error forking");
             // Close the files
             fclose(debug);
             fclose(errors);
             exit(EXIT_FAILURE);
-        }
-        if (pids[i] == 0) {
+        } else if (pids[i] == 0) {
             execvp(inputs[i][0], inputs[i]);
-            perror("Exec failed");
-            LOG_TO_FILE(errors, "Unable to exec a process");
+            perror("Failed to execute to launch one of the main process");
+            LOG_TO_FILE(errors, "Failed to execute to launch one of the main process");
             // Close the files
             fclose(debug);
             fclose(errors);
@@ -154,32 +156,30 @@ int main() {
     }
 
     /* LAUNCH THE INPUT */
-    pid_t konsole;
-    konsole = fork();
-    char *keyboard_input[] = {"konsole", "-e", "./keyboard_manager", write_input_fd_str, NULL};
+    pid_t konsole = fork();
+    char *keyboard_input[] = {"konsole", "-e", "./keyboard_manager", input_write_fd_str, NULL};
     if (konsole < 0) {
-        perror("Fork");
-        LOG_TO_FILE(errors, "Unable to fork");
+        perror("Error forking the keyboard manager");
+        LOG_TO_FILE(errors, "Error forking the keyboard manager");
         // Close the files
         fclose(debug);
         fclose(errors);
         exit(EXIT_FAILURE);
-    }
-    if (konsole == 0) {
+    } else if (konsole == 0) {
         execvp(keyboard_input[0], keyboard_input);
-        perror("Exec failed");
-        LOG_TO_FILE(errors, "Unable to exec a process");
+        perror("Failed to execute to launch the keyboard manager");
+        LOG_TO_FILE(errors, "Failed to execute to launch the keyboard manager");
         // Close the files
         fclose(debug);
         fclose(errors);
         exit(EXIT_FAILURE);
-    }
-    if (konsole != 0) {
+    } else {
         usleep(500000);    
         pids[N_PROCS - 1] = get_konsole_child(konsole);
     }
     
     usleep(500000);
+
     /* LAUNCH THE WATCHDOG */
     char pids_string[N_PROCS][50];
     char *wd_input[N_PROCS + 2];
@@ -191,17 +191,16 @@ int main() {
     wd_input[N_PROCS + 1] = NULL;
     wd = fork();
     if (wd < 0) {
-        perror("Fork");
-        LOG_TO_FILE(errors, "Unable to fork");
+        perror("Error forking the watchdog");
+        LOG_TO_FILE(errors, "Error forking the watchdog");
         // Close the files
         fclose(debug);
         fclose(errors);
         exit(EXIT_FAILURE);
-    }
-    if (wd == 0) {
+    } else if (wd == 0) {
         execvp(wd_input[0], wd_input);
-        perror("Exec failed");
-        LOG_TO_FILE(errors, "Unable to exec a process");
+        perror("Failed to execute to launch the watchdog");
+        LOG_TO_FILE(errors, "Failed to execute to launch the watchdog");
         // Close the files
         fclose(debug);
         fclose(errors);
@@ -212,6 +211,8 @@ int main() {
         wait(NULL);
     }
     wait(NULL);
+
+    /* END PROGRAM */
 
     // Close the files
     fclose(debug);

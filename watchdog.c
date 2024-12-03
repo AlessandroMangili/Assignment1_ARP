@@ -21,16 +21,16 @@ void get_current_time(char *buffer, int len) {
 void kill_processes() {
     for (int i = 0; i < N_PROCS; i++) {
         if (kill(pids[i], SIGUSR2) == -1) {
-            perror("kill");
+            perror("Error sending signal kill");
             switch (i) {
                 case 0:
-                    LOG_TO_FILE(errors, "Error in sending signal kill to the SERVER");
+                    LOG_TO_FILE(errors, "Error sending signal kill to the SERVER");
                     break;
                 case 1:
-                    LOG_TO_FILE(errors, "Error in sending signal kill to the DRONE");
+                    LOG_TO_FILE(errors, "Error sending signal kill to the DRONE");
                     break;
                 case 2:
-                    LOG_TO_FILE(errors, "Error in sending signal kill to the INPUT");
+                    LOG_TO_FILE(errors, "Error sending signal kill to the INPUT");
                     break;
             }
         }
@@ -59,7 +59,7 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
     }
 
     if (sig == SIGUSR2) {
-        LOG_TO_FILE(debug, "The keyboard manager has sent the termination signal, shutting down the drone and the server...");
+        LOG_TO_FILE(debug, "The keyboard manager has sent the termination signal, shutting down the drone and the server");
         kill_processes();
         // Close the files
         fclose(debug);
@@ -77,17 +77,17 @@ void watchdog(int timeout) {
         for (int i = 0; i < N_PROCS; i++) {
             status[i] = false;
             if (kill(pids[i], SIGUSR1) == -1) {
-                perror("kill");
+                perror("Error sending signal kill");
                 kill_processes();
                 switch (i) {
                     case 0:
-                        LOG_TO_FILE(errors, "Error in sending signal kill to the SERVER");
+                        LOG_TO_FILE(errors, "Error sending signal kill to the SERVER");
                         break;
                     case 1:
-                        LOG_TO_FILE(errors, "Error in sending signal kill to the DRONE");
+                        LOG_TO_FILE(errors, "Error sending signal kill to the DRONE");
                         break;
                     case 2:
-                        LOG_TO_FILE(errors, "Error in sending signal kill to the INPUT");
+                        LOG_TO_FILE(errors, "Error sending signal kill to the INPUT");
                         break;
                 }
                 // Close the files
@@ -141,20 +141,19 @@ void watchdog(int timeout) {
 }
 
 int main(int argc, char* argv[]) {
+    /* OPEN THE LOG FILES */
     debug = fopen("debug.log", "a");
     if (debug == NULL) {
-        perror("fopen");
+        perror("Error opening the debug file");
         kill_processes();
         exit(EXIT_FAILURE);
     }
     errors = fopen("errors.log", "a");
     if (errors == NULL) {
-        perror("fopen");
+        perror("Error errors the debug file");
         kill_processes();
         exit(EXIT_FAILURE);
     }
-
-    LOG_TO_FILE(debug, "Process started");
 
     if (argc != N_PROCS + 1) {
         LOG_TO_FILE(errors, "Invalid number of parameters");
@@ -164,10 +163,14 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    LOG_TO_FILE(debug, "Process started");
+
+    /* SAVED THE CHILD PIDS */
     for (int i = 0; i < N_PROCS; i++) {
         pids[i] = atoi(argv[i+1]);
     }
 
+    /* SETTING THE SIGNALS */
     struct sigaction sa;
     sa.sa_flags = SA_SIGINFO;
     sa.sa_sigaction = signal_handler;
@@ -175,7 +178,7 @@ int main(int argc, char* argv[]) {
 
     // Set the signal handler for SIGUSR1
     if (sigaction(SIGUSR1, &sa, NULL) == -1) {
-        perror("sigaction");
+        perror("Error in sigaction(SIGURS1)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS1)");
         kill_processes();
         // Close the files
@@ -185,7 +188,7 @@ int main(int argc, char* argv[]) {
     }
     // Set the signal handler for SIGUSR2
     if(sigaction(SIGUSR2, &sa, NULL) == -1){
-        perror("sigaction");
+        perror("Error in sigaction(SIGURS2)");
         kill_processes();
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS2)");
         // Close the files
@@ -194,8 +197,10 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    /* LAUNCH THE WATCHDOG */
     watchdog(TIMEOUT);
 
+    /* END THE PROGRAM */
     // Close the files
     fclose(debug);
     fclose(errors);
