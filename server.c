@@ -10,6 +10,7 @@
 #include <semaphore.h>
 #include <errno.h>
 #include "helper.h"
+#include "cJSON/cJSON.h"
 
 FILE *debug, *errors;       // File descriptors for the two log files
 pid_t wd_pid, map_pid;
@@ -177,16 +178,49 @@ int main(int argc, char *argv[]) {
         fclose(errors);
         exit(EXIT_FAILURE);
     }
+
+    /* IMPORT CONFIGURATION FROM JSON FILE */
+    char jsonBuffer[1024];
+    FILE *file = fopen("appsettings.json", "r");
+    if (file == NULL) {
+        perror("Error opening the file");
+        return EXIT_FAILURE;//1
+    }
+    int len = fread(jsonBuffer, 1, sizeof(jsonBuffer), file); 
+    fclose(file);
+
+    cJSON *json = cJSON_Parse(jsonBuffer);
+    if (json == NULL) {
+        perror("Error parsing the file");
+        return EXIT_FAILURE;
+    }
+    cJSON *initial_position = cJSON_GetObjectItemCaseSensitive(json,"DroneInitialPosition");
+    cJSON *position = cJSON_GetObjectItem(initial_position, "Position");
+    cJSON *velocity = cJSON_GetObjectItem(initial_position, "Velocity");
+    cJSON *force = cJSON_GetObjectItem(initial_position, "Force");
+    
+    int pos[2], vel[2], f[2];
+    for (int i = 0; i < cJSON_GetArraySize(position); ++i) {
+        cJSON *el_pos = cJSON_GetArrayItem(position, i);
+        cJSON *el_vel = cJSON_GetArrayItem(velocity, i);
+        cJSON *el_force = cJSON_GetArrayItem(force, i);
+        if (cJSON_IsNumber(el_pos)) pos[i] = el_pos->valueint;
+        if (cJSON_IsNumber(el_vel)) vel[i] = el_vel->valueint;
+        if (cJSON_IsNumber(el_force)) f[i] = el_force->valueint;
+    }
+    cJSON_Delete(json);
+
+    /* SET THE INITIAL CONFIGURATION */
     // Lock
     sem_wait(drone->sem);
     // Setting the initial position
     LOG_TO_FILE(debug, "Initialized initial position to the drone");
-    drone->pos_x = 10.0;
-    drone->pos_y = 10.0;
-    drone->vel_x = 0.0;
-    drone->vel_y = 0.0;
-    drone->force_x = 0.0;
-    drone->force_y = 0.0;
+    drone->pos_x = pos[0];
+    drone->pos_y = pos[1];
+    drone->vel_x = vel[0];
+    drone->vel_y = vel[1];
+    drone->force_x = f[0];
+    drone->force_y = f[1];
     // Unlock
     sem_post(drone->sem);
 

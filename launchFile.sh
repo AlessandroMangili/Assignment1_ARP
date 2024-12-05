@@ -5,7 +5,7 @@ if [ $? -eq 0 ]; then
         echo "Errore durante la compilazione di main.c"
     fi
 
-cc -o "server"  "server.c"
+cc -o "server"  "server.c" -lcjson
 if [ $? -eq 0 ]; then
         echo "Compilazione di server.c completata con successo"
     else
@@ -21,9 +21,9 @@ if [ $? -eq 0 ]; then
 
 cc -o "watchdog" "watchdog.c"
 if [ $? -eq 0 ]; then
-        echo "Compilazione di wd.c completata con successo"
+        echo "Compilazione di watchdog.c completata con successo"
     else
-        echo "Errore durante la compilazione di wd.c"
+        echo "Errore durante la compilazione di watchdog.c"
     fi
 
 cc -o "keyboard_manager" "keyboard_manager.c" "-lncurses"

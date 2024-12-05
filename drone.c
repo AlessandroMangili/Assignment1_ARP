@@ -34,8 +34,8 @@ float calculate_repulsive_forcex(Drone drone, int xo, int yo) {
         fx = 0;
     }
 
-    if (fx > MAXFREP) fx = MAXFREP;
-    if (fx < -MAXFREP) fx = -MAXFREP;
+    if (fx > MAX_FREP) fx = MAX_FREP;
+    if (fx < -MAX_FREP) fx = -MAX_FREP;
 
     return fx;
 }
@@ -52,8 +52,8 @@ float calculate_repulsive_forcey(Drone drone, int xo, int yo) {
         fy = 0;
     }
 
-    if (fy > MAXFREP) fy = MAXFREP;
-    if (fy < -MAXFREP) fy = -MAXFREP;
+    if (fy > MAX_FREP) fy = MAX_FREP;
+    if (fy < -MAX_FREP) fy = -MAX_FREP;
 
     return fy;
 }
@@ -204,7 +204,6 @@ void drone_process(int map_read_fd, int input_read_fd) {
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0';
                     sscanf(buffer, "%d, %d", &game.max_x, &game.max_y);
-                    printf("[DRONE]: Received update M: %d %d\n", game.max_x, game.max_y); // Da togliere
                 }
             }
             if (FD_ISSET(input_read_fd, &read_fds)) {
@@ -289,7 +288,6 @@ int main(int argc, char* argv[]) {
     char buffer[50];
     read(map_read_fd, buffer, sizeof(buffer) - 1);
     sscanf(buffer, "%d, %d", &game.max_x, &game.max_y);
-    printf("[DRONE]: Received update: %d %d\n", game.max_x, game.max_y);
     
     /* UPDATE THE DRONE POSITION */
     // Start the thread to continuously update the drone's information
