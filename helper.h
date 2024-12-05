@@ -11,7 +11,7 @@
 #define BOX_HEIGHT 3                        // Height of the box of each key
 #define BOX_WIDTH 5                         // Width of the box of each key
 #define TIMEOUT 10                          // Number of seconds after which, if a process does not respond, the watchdog terminates all the processes
-#define N_PROCS 3                           // Number of processes of the watchdog
+#define N_PROCS 5                          // Number of processes of the watchdog
 #define DRONE_SHARED_MEMORY "/drone_memory" // Name of the shared memory
 #define MASS 2                              // Mass (kg) of the drone
 #define FRICTION_COEFFICIENT 0.5            // Friction coefficient of the drone
@@ -27,15 +27,16 @@ typedef struct {
 } Drone;
 
 typedef struct {
-    float pos_x, pos_y;
-} Obstacle;
+    int pos_x, pos_y;
+    int point;
+    char type;
+} Object;
 
 typedef struct {
     int max_x, max_y;
 } Game;
 
-static inline __attribute__((always_inline)) void writeLog(FILE* file, char* message)
-{
+static inline __attribute__((always_inline)) void writeLog(FILE* file, char* message) {
     char time_now[50];
     time_t log_time = time(NULL);
     strftime(time_now, sizeof(time_now), "%Y-%m-%d %H:%M:%S", localtime(&log_time));
@@ -56,7 +57,7 @@ static inline __attribute__((always_inline)) void writeLog(FILE* file, char* mes
 }
 
 #define LOG_TO_FILE(file, message) {                                                                                \
-    char log[1024];                                                                                                 \
+    char log[4096];                                                                                                 \
     sprintf(log, "Generated at line [%d] by [%s] with the following message: %s", __LINE__, __FILE__, message);     \
     writeLog(file, log);                                                                                            \
 }

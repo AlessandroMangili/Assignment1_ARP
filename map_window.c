@@ -21,7 +21,7 @@ void draw_outer_box() {
     refresh();
 }
 
-void render_obstacles(Obstacle obstacles[]) {
+void render_obstacles(Object obstacles[]) {
     attron(COLOR_PAIR(3));
     /*for(int i = 0; i < N_OBS; i++){
         mvprintw(obstacles[i].pos_y, obstacles[i].pos_x, "#");

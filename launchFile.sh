@@ -1,4 +1,4 @@
-cc  -o "main" "main.c"
+cc  -o "main" "main.c" -lcjson
 if [ $? -eq 0 ]; then
         echo "Compilazione di main.c completata con successo"
     else
@@ -38,4 +38,18 @@ if [ $? -eq 0 ]; then
         echo "Compilazione di map_window.c completata con successo"
     else
         echo "Errore durante la compilazione di map_window.c"
+    fi
+
+cc -o "obstacle" "obstacle.c"
+if [ $? -eq 0 ]; then
+        echo "Compilazione di obstacle.c completata con successo"
+    else
+        echo "Errore durante la compilazione di obstacle.c"
+    fi
+
+cc -o "target" "target.c"
+if [ $? -eq 0 ]; then
+        echo "Compilazione di target.c completata con successo"
+    else
+        echo "Errore durante la compilazione di target.c"
     fi

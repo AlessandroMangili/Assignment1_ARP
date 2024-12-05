@@ -30,6 +30,12 @@ void kill_processes() {
                     LOG_TO_FILE(errors, "Error sending signal kill to the DRONE");
                     break;
                 case 2:
+                    LOG_TO_FILE(errors, "Error sending signal kill to the OBSTACLE");
+                    break;
+                case 3:
+                    LOG_TO_FILE(errors, "Error sending signal kill to the TARGET");
+                    break;
+                case 4:
                     LOG_TO_FILE(errors, "Error sending signal kill to the INPUT");
                     break;
             }
@@ -50,6 +56,12 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
                         LOG_TO_FILE(debug, "Received the signal from the DRONE");
                         break;
                     case 2:
+                        LOG_TO_FILE(debug, "Received the signal from the OBSTACLE");
+                        break;
+                    case 3:
+                        LOG_TO_FILE(debug, "Received the signal from the TARGET");
+                        break;
+                    case 4:
                         LOG_TO_FILE(debug, "Received the signal from the INPUT");
                         break;
                 }
@@ -87,6 +99,12 @@ void watchdog(int timeout) {
                         LOG_TO_FILE(errors, "Error sending signal kill to the DRONE");
                         break;
                     case 2:
+                        LOG_TO_FILE(errors, "Error sending signal kill to the OBSTACLE");
+                        break;
+                    case 3:
+                        LOG_TO_FILE(errors, "Error sending signal kill to the TARGET");
+                        break;
+                    case 4:
                         LOG_TO_FILE(errors, "Error sending signal kill to the INPUT");
                         break;
                 }
@@ -126,6 +144,14 @@ void watchdog(int timeout) {
                         LOG_TO_FILE(debug, message);
                         break;
                     case 2:
+                        snprintf(message, sizeof(message), "The OBSTACLE process [%d] did not respond, or its last activity exceeded the timeout at %s", pids[i], current_time);
+                        LOG_TO_FILE(debug, message);
+                        break;
+                    case 3:
+                        snprintf(message, sizeof(message), "The TARGET process [%d] did not respond, or its last activity exceeded the timeout at %s", pids[i], current_time);
+                        LOG_TO_FILE(debug, message);
+                        break;
+                    case 4:
                         snprintf(message, sizeof(message), "The INPUT process [%d] did not respond, or its last activity exceeded the timeout at %s", pids[i], current_time);
                         LOG_TO_FILE(debug, message);
                         break;

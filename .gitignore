@@ -61,3 +61,5 @@ main
 server
 drone
 map_window
+obstacle
+target
