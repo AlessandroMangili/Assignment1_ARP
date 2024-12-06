@@ -135,7 +135,7 @@ int main() {
     snprintf(vel_str, sizeof(vel_str), "%f,%f", vel[0], vel[1]);
     snprintf(force_str, sizeof(force_str), "%f,%f", f[0], f[1]);
 
-    int drone_map_fds[2], drone_key_fds[2], input_pipe_fds[2], obstacle_position_fds[2], target_position_fds[2],obstacle_map_fds[2], target_map_fds[2];
+    int drone_map_fds[2], drone_key_fds[2], input_pipe_fds[2], obstacle_position_fds[2], target_position_fds[2], obstacle_map_fds[2], target_map_fds[2], server_obstacles_fds[2], server_targets_fds[2];
     if (pipe(drone_map_fds) == -1) {
         perror("Error creating the pipe for the drone");
         LOG_TO_FILE(errors, "Error creating the pipe for the drone-map");
@@ -192,6 +192,22 @@ int main() {
         fclose(errors);
         exit(EXIT_FAILURE);
     }
+    if (pipe(server_obstacles_fds) == -1) {
+        perror("Error creating the pipe for the target");
+        LOG_TO_FILE(errors, "Error creating the pipe for the target");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+    if (pipe(server_targets_fds) == -1) {
+        perror("Error creating the pipe for the target");
+        LOG_TO_FILE(errors, "Error creating the pipe for the target");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
 
     /* CONVERT INTO STRING ALL THE FILE DESCRIPTOR */
     char drone_write_map_fd_str[10], drone_write_key_fd_str[10], input_write_fd_str[10];
@@ -200,6 +216,8 @@ int main() {
     char target_write_position_fd_str[10], target_read_position_fd_str[10];
     char obstacle_write_map_fd_str[10], obstacle_read_map_fd_str[10];
     char target_write_map_fd_str[10], target_read_map_fd_str[10];
+    char server_write_obstacles_fd_str[10], server_read_obstacles_fd_str[10];
+    char server_write_targets_fd_str[10], server_read_targets_fd_str[10];
 
     snprintf(obstacle_write_map_fd_str, sizeof(obstacle_write_map_fd_str), "%d", obstacle_map_fds[1]);
     snprintf(target_write_map_fd_str, sizeof(target_write_map_fd_str), "%d", target_map_fds[1]);
@@ -215,12 +233,16 @@ int main() {
     snprintf(target_read_position_fd_str, sizeof(target_read_position_fd_str), "%d", target_position_fds[0]);
     snprintf(obstacle_read_map_fd_str, sizeof(obstacle_read_map_fd_str), "%d", obstacle_map_fds[0]);
     snprintf(target_read_map_fd_str, sizeof(target_read_map_fd_str), "%d", target_map_fds[0]);
+    snprintf(server_write_obstacles_fd_str, sizeof(server_write_obstacles_fd_str), "%d", server_obstacles_fds[1]);
+    snprintf(server_read_obstacles_fd_str, sizeof(server_read_obstacles_fd_str), "%d", server_obstacles_fds[0]);
+    snprintf(server_write_targets_fd_str, sizeof(server_write_targets_fd_str), "%d", server_targets_fds[1]);
+    snprintf(server_read_targets_fd_str, sizeof(server_read_targets_fd_str), "%d", server_targets_fds[0]);
 
     /* LAUNCH THE SERVER AND THE DRONE */
     pid_t pids[N_PROCS], wd;
-    char *inputs[N_PROCS - 1][12] = {
-        {"./server", drone_write_map_fd_str, drone_write_key_fd_str, input_read_fd_str, obstacle_write_map_fd_str, obstacle_read_position_fd_str, target_write_map_fd_str, target_read_position_fd_str, pos_str, vel_str, force_str, NULL}, 
-        {"./drone", drone_read_map_fd_str, drone_read_key_fd_str, NULL},
+    char *inputs[N_PROCS - 1][14] = {
+        {"./server", drone_write_map_fd_str, drone_write_key_fd_str, input_read_fd_str, obstacle_write_map_fd_str, obstacle_read_position_fd_str, target_write_map_fd_str, target_read_position_fd_str, server_write_obstacles_fd_str, server_write_targets_fd_str, pos_str, vel_str, force_str, NULL}, 
+        {"./drone", drone_read_map_fd_str, drone_read_key_fd_str, server_read_obstacles_fd_str, server_read_targets_fd_str, NULL},
         {"./obstacle", obstacle_write_position_fd_str, obstacle_read_map_fd_str, n_obs, NULL},
         {"./target", target_write_position_fd_str, target_read_map_fd_str, n_target, n_target, NULL}
     };

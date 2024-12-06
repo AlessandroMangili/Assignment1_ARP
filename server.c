@@ -17,7 +17,7 @@ pid_t wd_pid, map_pid, obs_pid, targ_pid;
 Drone *drone;
 time_t start;
 
-void server(int drone_write_map_fd, int drone_write_key_fd, int input_read_fd, int map_read_fd, int obstacle_write_map_fd, int obstacle_read_position_fd, int target_write_map_fd, int target_read_position_fd) {
+void server(int drone_write_map_fd, int drone_write_key_fd, int drone_write_obstacles_fd, int drone_write_targets_fd, int input_read_fd, int map_read_fd, int map_write_fd, int obstacle_write_map_fd, int obstacle_read_position_fd, int target_write_map_fd, int target_read_position_fd) {
     char buffer[2048];
     fd_set read_fds;
     struct timeval timeout;
@@ -81,8 +81,8 @@ void server(int drone_write_map_fd, int drone_write_key_fd, int input_read_fd, i
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0';
                     LOG_TO_FILE(errors, buffer);
-                    //write(drone_write_key_fd, buffer, strlen(buffer));
-
+                    write(drone_write_obstacles_fd, buffer, strlen(buffer));
+                    write(map_write_fd, buffer, strlen(buffer));
                 }
             }
             // Check if the target process has sent him the position of the targets generated
@@ -91,7 +91,8 @@ void server(int drone_write_map_fd, int drone_write_key_fd, int input_read_fd, i
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0';
                     LOG_TO_FILE(errors, buffer);
-                    //write(drone_write_key_fd, buffer, strlen(buffer));
+                    write(drone_write_targets_fd, buffer, strlen(buffer));
+                    write(map_write_fd, buffer, strlen(buffer));
                 }
             }
         }
@@ -99,7 +100,10 @@ void server(int drone_write_map_fd, int drone_write_key_fd, int input_read_fd, i
     // Close file descriptor
     close(drone_write_key_fd);
     close(drone_write_map_fd);
+    close(drone_write_obstacles_fd);
+    close(drone_write_targets_fd);
     close(map_read_fd);
+    close(map_write_fd);
     close(input_read_fd);
     close(obstacle_write_map_fd);
     close(obstacle_read_position_fd);
@@ -257,7 +261,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    if (argc < 11) {
+    if (argc < 13) {
         LOG_TO_FILE(errors, "Invalid number of parameters");
         // Close the files
         fclose(debug);
@@ -274,8 +278,11 @@ int main(int argc, char *argv[]) {
         obstacle_write_map_fd = atoi(argv[4]), 
         obstacle_read_position_fd = atoi(argv[5]), 
         target_write_map_fd = atoi(argv[6]), 
-        target_read_position_fd = atoi(argv[7]);
+        target_read_position_fd = atoi(argv[7]),
+        drone_write_obstacles_fd = atoi(argv[8]), 
+        drone_write_targets_fd = atoi(argv[9]); 
     int pipe_fd[2];
+    int pipe2_fd[2];
     if (pipe(pipe_fd) == -1) {
         perror("Error creating the pipe for the map");
         LOG_TO_FILE(errors, "Error creating the pipe");
@@ -284,9 +291,20 @@ int main(int argc, char *argv[]) {
         fclose(errors);
         exit(EXIT_FAILURE);
     }
+    if (pipe(pipe2_fd) == -1) {
+        perror("Error creating the pipe 2 for the map");
+        LOG_TO_FILE(errors, "Error creating the pipe 2");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
     int map_read_fd = pipe_fd[0];
     char write_fd_str[10];
     snprintf(write_fd_str, sizeof(write_fd_str), "%d", pipe_fd[1]);
+    char map_read2_fd_str[10];
+    int map_write_fd = pipe2_fd[1];
+    snprintf(map_read2_fd_str, sizeof(map_read2_fd_str), "%d", pipe2_fd[0]);
 
     /* CREATE THE SHARED MEMORY */
     int mem_fd = create_shared_memory();
@@ -308,15 +326,15 @@ int main(int argc, char *argv[]) {
     sem_wait(drone->sem);
     // Setting the initial position
     LOG_TO_FILE(debug, "Initialized initial position to the drone");
-    sscanf(argv[8], "%f,%f", &drone->pos_x, &drone->pos_y);
-    sscanf(argv[9], "%f,%f", &drone->vel_x, &drone->vel_y);
-    sscanf(argv[10], "%f,%f", &drone->force_x, &drone->force_y);
+    sscanf(argv[10], "%f,%f", &drone->pos_x, &drone->pos_y);
+    sscanf(argv[11], "%f,%f", &drone->vel_x, &drone->vel_y);
+    sscanf(argv[12], "%f,%f", &drone->force_x, &drone->force_y);
     // Unlock
     sem_post(drone->sem);
 
     /* LAUNCH THE MAP WINDOW */
     // Fork to create the map window process
-    char *map_window_path[] = {"konsole", "-e", "./map_window", write_fd_str, NULL};
+    char *map_window_path[] = {"konsole", "-e", "./map_window", write_fd_str, map_read2_fd_str, NULL};
     map_pid = fork();
     if (map_pid ==-1){
         perror("Error forking the map file");
@@ -376,7 +394,7 @@ int main(int argc, char *argv[]) {
     }
 
     /* LAUNCH THE SERVER */
-    server(drone_write_map_fd, drone_write_key_fd, input_read_fd, map_read_fd, obstacle_write_map_fd, obstacle_read_position_fd, target_write_map_fd, target_read_position_fd);
+    server(drone_write_map_fd, drone_write_key_fd, drone_write_obstacles_fd, drone_write_targets_fd, input_read_fd, map_read_fd, map_write_fd, obstacle_write_map_fd, obstacle_read_position_fd, target_write_map_fd, target_read_position_fd);
 
     /* END PROGRAM */
     // Unlink the shared memory

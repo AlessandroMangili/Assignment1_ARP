@@ -170,7 +170,7 @@ int open_shared_memory() {
     return mem_fd;
 }
 
-void drone_process(int map_read_fd, int input_read_fd) {
+void drone_process(int map_read_fd, int input_read_fd, int obstacles_read_fd, int targets_read_fd) {
     char buffer[256];
     fd_set read_fds;
     struct timeval timeout;
@@ -182,11 +182,19 @@ void drone_process(int map_read_fd, int input_read_fd) {
     if(input_read_fd > max_fd) {
         max_fd = input_read_fd;
     }
+    if(obstacles_read_fd > max_fd) {
+        max_fd = obstacles_read_fd;
+    }
+    if(targets_read_fd > max_fd) {
+        max_fd = targets_read_fd;
+    }
 
     while(1) {
         FD_ZERO(&read_fds);
         FD_SET(map_read_fd, &read_fds);
         FD_SET(input_read_fd, &read_fds);
+        FD_SET(obstacles_read_fd, &read_fds);
+        FD_SET(targets_read_fd, &read_fds);
 
         timeout.tv_sec = 1;
         timeout.tv_usec = 0;
@@ -216,6 +224,20 @@ void drone_process(int map_read_fd, int input_read_fd) {
                     //sem_post(drone->sem);
                 }
             }
+            if (FD_ISSET(obstacles_read_fd, &read_fds)) {
+                ssize_t bytes_read = read(obstacles_read_fd, buffer, sizeof(buffer) - 1);
+                if (bytes_read > 0) {
+                    buffer[bytes_read] = '\0';
+                    sscanf(buffer, "%d, %d, %d, %c", &objects.pos_x, &objects.pos_y, &objects.point, &objects.type);
+                }
+            }
+            if (FD_ISSET(targets_read_fd, &read_fds)) {
+                ssize_t bytes_read = read(targets_read_fd, buffer, sizeof(buffer) - 1);
+                if (bytes_read > 0) {
+                    buffer[bytes_read] = '\0';
+                    sscanf(buffer, "%d, %d, %d, %c", &objects.pos_x, &objects.pos_y, &objects.point, &objects.type);
+                }
+            }
         }
     }
 }
@@ -233,7 +255,7 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    if (argc < 3) {
+    if (argc < 5) {
         LOG_TO_FILE(errors, "Invalid number of parameters");
         // Close the files
         fclose(debug);
@@ -246,6 +268,8 @@ int main(int argc, char* argv[]) {
     /* SETUP THE PIPES */
     int map_read_fd = atoi(argv[1]);
     int input_read_fd = atoi(argv[2]);
+    int obstacles_read_fd = atoi(argv[3]);
+    int targets_read_fd = atoi(argv[4]);
 
     /* SETUP THE SIGNALS */
     struct sigaction sa;
@@ -303,7 +327,7 @@ int main(int argc, char* argv[]) {
     }
 
     /* LAUNCH THE DRONE */
-    drone_process(map_read_fd, input_read_fd);
+    drone_process(map_read_fd, input_read_fd, obstacles_read_fd, targets_read_fd);
 
     /* END PROGRAM */
     // Close the file descriptor

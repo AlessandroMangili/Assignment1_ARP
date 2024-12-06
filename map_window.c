@@ -171,7 +171,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    if (argc < 2) {
+    if (argc < 3) {
         LOG_TO_FILE(errors, "Invalid number of parameters");
         // Close the files
         fclose(debug);
@@ -183,6 +183,7 @@ int main(int argc, char *argv[]) {
 
     /* SETUP THE PIPE */
     server_write_fd = atoi(argv[1]);
+    int server_read_fd = atoi(argv[2]);
 
     /* SETUP NCURSE */
     initscr(); 
@@ -229,7 +230,36 @@ int main(int argc, char *argv[]) {
     write_to_server();
 
     /* LAUNCH THE MAP */
-    map_render(drone);
+    while (1) {
+        FD_ZERO(&read_fds);
+        FD_SET(server_read_fd, &read_fds);
+
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 50000;
+        int activity;
+        do {
+            activity = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
+        } while(activity == -1 && errno == EINTR);
+
+        if (activity < 0) {
+            perror("Error in the server's select");
+            LOG_TO_FILE(errors, "Error in select which pipe reads");
+            break;
+        } else if (activity > 0) {
+            // Check if the map process has sent him the map size
+            if (FD_ISSET(server_read_fd, &read_fds)) {
+                ssize_t bytes_read = read(server_read_fd, buffer, sizeof(buffer) - 1);
+                if (bytes_read > 0) {
+                    buffer[bytes_read] = '\0'; // End the string
+                    //sscanf(buffer, "%d, %d", &game.max_x, &game.max_y);
+                    printf("%s\n", buffer);
+                }
+            }
+        } else {
+            map_render(drone);
+        }
+    }    
+    //map_render(drone);
 
     /* END PROGRAM*/
     endwin();
