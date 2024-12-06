@@ -9,11 +9,11 @@
 #include <sys/mman.h>
 #include <semaphore.h>
 #include <errno.h>
+#include <pthread.h>
 #include "helper.h"
-#include "cJSON/cJSON.h"
 
 FILE *debug, *errors;       // File descriptors for the two log files
-pid_t wd_pid, map_pid;
+pid_t wd_pid, map_pid, obs_pid, targ_pid;
 Drone *drone;
 
 void server(int drone_write_map_fd, int drone_write_key_fd, int input_read_fd, int map_read_fd, int obstacle_write_map_fd, int obstacle_read_position_fd, int target_write_map_fd, int target_read_position_fd) {
@@ -80,6 +80,7 @@ void server(int drone_write_map_fd, int drone_write_key_fd, int input_read_fd, i
                     buffer[bytes_read] = '\0';
                     LOG_TO_FILE(errors, buffer);
                     //write(drone_write_key_fd, buffer, strlen(buffer));
+
                 }
             }
             // Check if the target process has sent him the position of the targets generated
@@ -112,7 +113,22 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
     }
     if (sig == SIGUSR2) {
         LOG_TO_FILE(debug, "Shutting down by the WATCHDOG");
-        if (kill(map_pid, SIGTERM) == -1) {
+
+        // Unlink the shared memory
+        if (shm_unlink(DRONE_SHARED_MEMORY) == -1) {
+            perror("Unlink shared memory");
+            LOG_TO_FILE(errors, "Error unlinking the shared memory");
+            // Close the files
+            fclose(debug);
+            fclose(errors); 
+            exit(EXIT_FAILURE);
+        }
+
+        // Close the semaphore and unlink it
+        sem_close(drone->sem);
+        sem_unlink("drone_sem");
+
+        if (kill(map_pid, SIGUSR2) == -1) {
             perror("Error sending SIGTERM signal to the MAP");
             LOG_TO_FILE(errors, "Error sending SIGTERM signal to the MAP");
             exit(EXIT_FAILURE);
@@ -134,9 +150,8 @@ int create_shared_memory() {
         fclose(debug);
         fclose(errors);   
         exit(EXIT_FAILURE);
-    } 
+    }
     
-    LOG_TO_FILE(debug, "Opened the shared memory");
     // Set the size of the shared memory
     if(ftruncate(mem_fd, sizeof(Drone)) == -1){
         perror("Error setting the size of the shared memory");
@@ -157,7 +172,74 @@ int create_shared_memory() {
         fclose(errors);   
         exit(EXIT_FAILURE);
     }
+    LOG_TO_FILE(debug, "Created and opened the shared memory");
     return mem_fd;
+}
+
+void *send_signal_generation_thread() {
+    time_t start, finish;
+    double diff; 
+    pid_t pid_t_o[] = {targ_pid, obs_pid};
+
+    while(1) {
+        time(&start);
+        do {
+            time(&finish);
+            diff = difftime(finish, start);
+        } while (diff < 15);
+
+        for(int i = 0; i < 2; i++) {
+            if(pid_t_o[i] < 0) continue;
+            
+            if (kill(pid_t_o[i], SIGTERM) == -1) {
+                perror("Error sending signal kill");
+                switch (i) {
+                    case 0:
+                        LOG_TO_FILE(errors, "Error sending signal kill to the TARGET");
+                        break;
+                    case 1:
+                        LOG_TO_FILE(errors, "Error sending signal kill to the OBSTACLE");
+                        break;
+                }
+            }
+        }
+    }
+}
+
+int get_pid_by_command(const char *process_name) {
+    char command[256];
+    char buffer[1024];
+    FILE *pipe;
+    int pid = -1;
+
+    /*Per sistei più lenti bisogna aumentare la sleep altrimenti 
+    target e obstacle non vengono avviati in tempo*/
+
+    sleep(2);
+
+    // Costruisci il comando ps aux | grep <process_name>
+    snprintf(command, sizeof(command), "ps aux | grep '%s' | grep -v 'grep'", process_name);
+
+    // Esegui il comando usando popen
+    pipe = popen(command, "r");
+    if (!pipe) {
+        perror("popen");
+        return -1;
+    }
+
+    // Leggi l'output del comando
+    while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
+        // Analizza l'output per estrarre il PID
+        char user[32], cmd_part[128];
+        if (sscanf(buffer, "%s %d %*f %*f %*f %*f %*s %*s %*s %*s %[^\n]", user, &pid, cmd_part) == 3) {
+            if (strstr(cmd_part, process_name) != NULL) {
+                break; // Trovato il PID, esci dal loop
+            }
+        }
+    }
+
+    pclose(pipe);
+    return pid; // Ritorna il PID trovato, o -1 se non trovato
 }
 
 int main(int argc, char *argv[]) {
@@ -272,6 +354,22 @@ int main(int argc, char *argv[]) {
         // Close the files
         fclose(debug);
         fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+
+    obs_pid = get_pid_by_command("./obstacle");
+    targ_pid = get_pid_by_command("./target");
+
+    usleep(50000);
+
+    // LAUNCH THE THREAD FOR PERIODIC SIGNAL
+    pthread_t server_thread;
+    if (pthread_create(&server_thread, NULL, send_signal_generation_thread, NULL) != 0) {
+        perror("Error creating the thread for updating the drone's information");
+        LOG_TO_FILE(errors, "Error creating the thread for updating the drone's information");
+        // Close the files
+        fclose(debug);
+        fclose(errors);   
         exit(EXIT_FAILURE);
     }
 

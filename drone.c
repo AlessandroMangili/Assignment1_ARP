@@ -17,6 +17,7 @@ pid_t wd_pid;
 float rho0 = 2, rho1 = 0.5, rho2 = 2, eta = 40;
 Game game;
 Drone *drone;
+//Object obstacles, targets;
 
 float calculate_friction_force(float velocity) {
     return -FRICTION_COEFFICIENT * velocity;
@@ -305,15 +306,6 @@ int main(int argc, char* argv[]) {
     drone_process(map_read_fd, input_read_fd);
 
     /* END PROGRAM */
-    // Unlink the shared memory
-    if (shm_unlink(DRONE_SHARED_MEMORY) == -1) {
-        perror("Unlink shared memory");
-        LOG_TO_FILE(errors, "Error in removing the shared memory");
-        // Close the files
-        fclose(debug);
-        fclose(errors); 
-        exit(EXIT_FAILURE);
-    }
     // Close the file descriptor
     if (close(mem_fd) == -1) {
         perror("Close file descriptor");

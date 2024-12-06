@@ -5,7 +5,7 @@ if [ $? -eq 0 ]; then
         echo "Errore durante la compilazione di main.c"
     fi
 
-cc -o "server"  "server.c" -lcjson
+cc -o "server"  "server.c"
 if [ $? -eq 0 ]; then
         echo "Compilazione di server.c completata con successo"
     else

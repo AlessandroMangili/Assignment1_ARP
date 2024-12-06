@@ -287,15 +287,6 @@ int main(int argc, char* argv[]) {
     delwin(info_window);
     endwin();
 
-    // Unlink the shared memory
-    if (shm_unlink(DRONE_SHARED_MEMORY) == -1) {
-        perror("Unlink shared memory");
-        LOG_TO_FILE(errors, "Error in removing the shared memory");
-        // Close the files
-        fclose(debug);
-        fclose(errors); 
-        exit(EXIT_FAILURE);
-    }
     // Close the file descriptor
     if (close(mem_fd) == -1) {
         perror("Close file descriptor");

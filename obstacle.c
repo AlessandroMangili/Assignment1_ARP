@@ -17,8 +17,9 @@ Game game;
 pid_t wd_pid;
 Drone *drone;
 int N_OBS;
+int obstacle_write_position_fd = -1;
 
-void generate_obstacles(int obstacle_write_position_fd){
+void generate_obstacles(){
     Object obstacles[N_OBS];
     char obstacleStr[1024] = "";
     char temp[50];
@@ -73,6 +74,14 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
         fclose(debug);
         exit(EXIT_SUCCESS);
     }
+    if (sig == SIGTERM) {
+        if (obstacle_write_position_fd > 0) {
+            LOG_TO_FILE(debug, "Generating new obstacles position");
+            generate_obstacles();
+        } else {
+            printf("NOT SET\n");
+        }
+    }
 }
 
 int main(int argc, char* argv[]) {
@@ -98,7 +107,8 @@ int main(int argc, char* argv[]) {
     LOG_TO_FILE(debug, "Process started");
 
     /* CREATE AND SETUP THE PIPES */
-    int obstacle_write_position_fd = atoi(argv[1]), obstacle_read_map_fd = atoi(argv[2]);
+    obstacle_write_position_fd = atoi(argv[1]);
+    int obstacle_read_map_fd = atoi(argv[2]);
 
     /* IMPORT CONFIGURATION PARAMETERS FROM THE MAIN */
     N_OBS = atoi(argv[3]);
@@ -111,7 +121,7 @@ int main(int argc, char* argv[]) {
 
     // Set the signal handler for SIGUSR1
     if (sigaction(SIGUSR1, &sa, NULL) == -1) {
-        perror("sigaction");
+        perror("Error in sigaction(SIGURS1)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS1)");
         // Close the files
         fclose(debug);
@@ -120,8 +130,17 @@ int main(int argc, char* argv[]) {
     }
     // Set the signal handler for SIGUSR2
     if(sigaction(SIGUSR2, &sa, NULL) == -1){
-        perror("sigaction");
+        perror("Error in sigaction(SIGURS2)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS2)");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+    // Set the signal handler for SIGTERM
+    if(sigaction(SIGTERM, &sa, NULL) == -1){
+        perror("Error in sigaction(SIGTERM)");
+        LOG_TO_FILE(errors, "Error in sigaction(SIGTERM)");
         // Close the files
         fclose(debug);
         fclose(errors);
@@ -144,7 +163,7 @@ int main(int argc, char* argv[]) {
         FD_ZERO(&read_fds);
         FD_SET(obstacle_read_map_fd, &read_fds);
 
-        timeout.tv_sec = 10;
+        timeout.tv_sec = 1;
         timeout.tv_usec = 0;
         int activity;
         do {
@@ -164,20 +183,9 @@ int main(int argc, char* argv[]) {
                     sscanf(buffer, "%d, %d", &game.max_x, &game.max_y);
                 }
             }
-        } else {
-            generate_obstacles(obstacle_write_position_fd);
         }
     }    
 
-    // Unlink the shared memory
-    if (shm_unlink(DRONE_SHARED_MEMORY) == -1) {
-        perror("Unlink shared memory");
-        LOG_TO_FILE(errors, "Error in removing the shared memory");
-        // Close the files
-        fclose(debug);
-        fclose(errors); 
-        exit(EXIT_FAILURE);
-    }
     // Close the file descriptor
     if (close(mem_fd) == -1) {
         perror("Close file descriptor");

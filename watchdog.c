@@ -21,22 +21,22 @@ void get_current_time(char *buffer, int len) {
 void kill_processes() {
     for (int i = 0; i < N_PROCS; i++) {
         if (kill(pids[i], SIGUSR2) == -1) {
-            perror("Error sending signal kill");
+            perror("Error sending signal SIGUSR2 kill from the watchdog");
             switch (i) {
                 case 0:
-                    LOG_TO_FILE(errors, "Error sending signal kill to the SERVER");
+                    LOG_TO_FILE(errors, "Error sending signal SIGUSR2 kill to the SERVER");
                     break;
                 case 1:
-                    LOG_TO_FILE(errors, "Error sending signal kill to the DRONE");
+                    LOG_TO_FILE(errors, "Error sending signal SIGUSR2 kill to the DRONE");
                     break;
                 case 2:
-                    LOG_TO_FILE(errors, "Error sending signal kill to the OBSTACLE");
+                    LOG_TO_FILE(errors, "Error sending signal SIGUSR2 kill to the OBSTACLE");
                     break;
                 case 3:
-                    LOG_TO_FILE(errors, "Error sending signal kill to the TARGET");
+                    LOG_TO_FILE(errors, "Error sending signal SIGUSR2 kill to the TARGET");
                     break;
                 case 4:
-                    LOG_TO_FILE(errors, "Error sending signal kill to the INPUT");
+                    LOG_TO_FILE(errors, "Error sending signal SIGUSR2 kill to the INPUT");
                     break;
             }
         }
@@ -78,6 +78,9 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
         fclose(errors);
         exit(EXIT_SUCCESS);
     }
+    if (sig == SIGTERM) {
+        LOG_TO_FILE(debug, "WD");
+    }
 }
 
 void watchdog(int timeout) {
@@ -89,23 +92,23 @@ void watchdog(int timeout) {
         for (int i = 0; i < N_PROCS; i++) {
             status[i] = false;
             if (kill(pids[i], SIGUSR1) == -1) {
-                perror("Error sending signal kill");
+                perror("Error sending signal SIGUSR1 kill from the watchdog");
                 kill_processes();
                 switch (i) {
                     case 0:
-                        LOG_TO_FILE(errors, "Error sending signal kill to the SERVER");
+                        LOG_TO_FILE(errors, "Error sending signal SIGUSR1 kill to the SERVER");
                         break;
                     case 1:
-                        LOG_TO_FILE(errors, "Error sending signal kill to the DRONE");
+                        LOG_TO_FILE(errors, "Error sending signal SIGUSR1 kill to the DRONE");
                         break;
                     case 2:
-                        LOG_TO_FILE(errors, "Error sending signal kill to the OBSTACLE");
+                        LOG_TO_FILE(errors, "Error sending signal SIGUSR1 kill to the OBSTACLE");
                         break;
                     case 3:
-                        LOG_TO_FILE(errors, "Error sending signal kill to the TARGET");
+                        LOG_TO_FILE(errors, "Error sending signal SIGUSR1 kill to the TARGET");
                         break;
                     case 4:
-                        LOG_TO_FILE(errors, "Error sending signal kill to the INPUT");
+                        LOG_TO_FILE(errors, "Error sending signal SIGUSR1 kill to the INPUT");
                         break;
                 }
                 // Close the files
@@ -217,6 +220,15 @@ int main(int argc, char* argv[]) {
         perror("Error in sigaction(SIGURS2)");
         kill_processes();
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS2)");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+    // Set the signal handler for SIGTERM
+    if(sigaction(SIGTERM, &sa, NULL) == -1){
+        perror("Error in sigaction(SIGTERM)");
+        LOG_TO_FILE(errors, "Error in sigaction(SIGTERM)");
         // Close the files
         fclose(debug);
         fclose(errors);

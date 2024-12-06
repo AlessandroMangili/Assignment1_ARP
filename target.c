@@ -7,18 +7,18 @@
 #include <sys/shm.h>
 #include <sys/mman.h>
 #include <math.h>
-#include "helper.h"
 #include <sys/select.h>
 #include <errno.h>
+#include "helper.h"
 
 FILE *debug, *errors;
 Game game;
 Drone *drone;
 pid_t wd_pid;
 int N_TARGET;
-int target_write_position_fd;
+int target_write_position_fd = -1;
 
-void generate_targets(int target_write_position_fd){
+void generate_targets(){
     Object targets[N_TARGET];
     char targetStr[1024] = "";
     char temp[50];
@@ -50,6 +50,13 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
         fclose(errors);
         fclose(debug);
         exit(EXIT_SUCCESS);
+    }
+
+    if (sig == SIGTERM) {
+        if (target_write_position_fd > 0) {
+            LOG_TO_FILE(debug, "Generating new targets position");
+            generate_targets();
+        }
     }
 }
 
@@ -98,7 +105,8 @@ int main(int argc, char* argv[]) {
     LOG_TO_FILE(debug, "Process started");
 
     /* CREATE AND SETUP THE PIPES */
-    int target_write_position_fd = atoi(argv[1]), target_read_map_fd = atoi(argv[2]);
+    target_write_position_fd = atoi(argv[1]);
+    int target_read_map_fd = atoi(argv[2]);
 
     /* IMPORT CONFIGURATION PARAMETERS FROM THE MAIN */
     N_TARGET = atoi(argv[3]);
@@ -111,7 +119,7 @@ int main(int argc, char* argv[]) {
 
     // Set the signal handler for SIGUSR1
     if (sigaction(SIGUSR1, &sa, NULL) == -1) {
-        perror("sigaction");
+        perror("Error in sigaction(SIGURS1)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS1)");
         // Close the files
         fclose(debug);
@@ -120,8 +128,17 @@ int main(int argc, char* argv[]) {
     }
     // Set the signal handler for SIGUSR2
     if(sigaction(SIGUSR2, &sa, NULL) == -1){
-        perror("sigaction");
+        perror("Error in sigaction(SIGURS2)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS2)");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+    // Set the signal handler for SIGUSR2
+    if(sigaction(SIGTERM, &sa, NULL) == -1){
+        perror("Error in sigaction(SIGTERM)");
+        LOG_TO_FILE(errors, "Error in sigaction(SIGTERM)");
         // Close the files
         fclose(debug);
         fclose(errors);
@@ -144,7 +161,7 @@ int main(int argc, char* argv[]) {
         FD_ZERO(&read_fds);
         FD_SET(target_read_map_fd, &read_fds);
 
-        timeout.tv_sec = 10;
+        timeout.tv_sec = 1;
         timeout.tv_usec = 0;
         int activity;
         do {
@@ -164,20 +181,9 @@ int main(int argc, char* argv[]) {
                     sscanf(buffer, "%d, %d", &game.max_x, &game.max_y);
                 }
             }
-        } else {
-            generate_targets(target_write_position_fd);
         }
     }    
 
-    // Unlink the shared memory
-    if (shm_unlink(DRONE_SHARED_MEMORY) == -1) {
-        perror("Unlink shared memory");
-        LOG_TO_FILE(errors, "Error in removing the shared memory");
-        // Close the files
-        fclose(debug);
-        fclose(errors); 
-        exit(EXIT_FAILURE);
-    }
     // Close the file descriptor
     if (close(mem_fd) == -1) {
         perror("Close file descriptor");
