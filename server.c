@@ -15,6 +15,7 @@
 FILE *debug, *errors;       // File descriptors for the two log files
 pid_t wd_pid, map_pid, obs_pid, targ_pid;
 Drone *drone;
+time_t start;
 
 void server(int drone_write_map_fd, int drone_write_key_fd, int input_read_fd, int map_read_fd, int obstacle_write_map_fd, int obstacle_read_position_fd, int target_write_map_fd, int target_read_position_fd) {
     char buffer[2048];
@@ -63,6 +64,7 @@ void server(int drone_write_map_fd, int drone_write_key_fd, int input_read_fd, i
                     write(drone_write_map_fd, buffer, strlen(buffer));
                     write(obstacle_write_map_fd, buffer, strlen(buffer));
                     write(target_write_map_fd, buffer, strlen(buffer));
+                    time(&start);
                 }
             }
             // Check if the input process has sent him a key that was pressed
@@ -177,7 +179,7 @@ int create_shared_memory() {
 }
 
 void *send_signal_generation_thread() {
-    time_t start, finish;
+    time_t finish;
     double diff; 
     pid_t pid_t_o[] = {targ_pid, obs_pid};
 

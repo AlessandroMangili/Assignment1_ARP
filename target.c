@@ -179,6 +179,7 @@ int main(int argc, char* argv[]) {
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0'; // End the string
                     sscanf(buffer, "%d, %d", &game.max_x, &game.max_y);
+                    generate_targets();
                 }
             }
         }
