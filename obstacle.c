@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <bsd/stdlib.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <unistd.h>
@@ -27,11 +28,11 @@ void generate_obstacles(){
     // create obstacles
     for (int i = 0; i < N_OBS; i++){
         // generates random coordinates
-        obstacles[i].pos_x = rand() % (game.max_x-2) + 1; 
-        obstacles[i].pos_y = rand() % (game.max_y-2) + 1;
+        obstacles[i].pos_x = arc4random_uniform(game.max_x-2) + 1; 
+        obstacles[i].pos_y = arc4random_uniform(game.max_y-2) + 1;
         obstacles[i].point = -1;
         obstacles[i].type = 'o';
-        sprintf(temp, "%d,%d,%d,%c|", obstacles[i].pos_x, obstacles[i].pos_y, obstacles[i].point, obstacles[i].type);
+        sprintf(temp, i + 1 != N_OBS ? "%d,%d,%d,%c|" : "%d,%d,%d,%c", obstacles[i].pos_x, obstacles[i].pos_y, obstacles[i].point, obstacles[i].type);
         strcat(obstacleStr, temp);
     }
     write(obstacle_write_position_fd, obstacleStr, strlen(obstacleStr));

@@ -210,39 +210,39 @@ int main() {
     }
 
     /* CONVERT INTO STRING ALL THE FILE DESCRIPTOR */
-    char drone_write_map_fd_str[10], drone_write_key_fd_str[10], input_write_fd_str[10];
-    char drone_read_map_fd_str[10], drone_read_key_fd_str[10], input_read_fd_str[10];
+    char drone_write_size_fd_str[10], drone_write_key_fd_str[10], input_write_fd_str[10];
+    char drone_read_map_fd_str[10], drone_read_key_fd_str[10], input_read_key_fd_str[10];
     char obstacle_write_position_fd_str[10], obstacle_read_position_fd_str[10];
     char target_write_position_fd_str[10], target_read_position_fd_str[10];
-    char obstacle_write_map_fd_str[10], obstacle_read_map_fd_str[10];
-    char target_write_map_fd_str[10], target_read_map_fd_str[10];
-    char server_write_obstacles_fd_str[10], server_read_obstacles_fd_str[10];
-    char server_write_targets_fd_str[10], server_read_targets_fd_str[10];
+    char obstacle_write_size_fd_str[10], obstacle_read_map_fd_str[10];
+    char target_write_size_fd_str[10], target_read_map_fd_str[10];
+    char drone_write_obstacles_fd_str[10], server_read_obstacles_fd_str[10];
+    char drone_write_targets_fd_str[10], server_read_targets_fd_str[10];
 
-    snprintf(obstacle_write_map_fd_str, sizeof(obstacle_write_map_fd_str), "%d", obstacle_map_fds[1]);
-    snprintf(target_write_map_fd_str, sizeof(target_write_map_fd_str), "%d", target_map_fds[1]);
+    snprintf(obstacle_write_size_fd_str, sizeof(obstacle_write_size_fd_str), "%d", obstacle_map_fds[1]);
+    snprintf(target_write_size_fd_str, sizeof(target_write_size_fd_str), "%d", target_map_fds[1]);
     snprintf(obstacle_write_position_fd_str, sizeof(obstacle_write_position_fd_str), "%d", obstacle_position_fds[1]);
     snprintf(target_write_position_fd_str, sizeof(target_write_position_fd_str), "%d", target_position_fds[1]);
-    snprintf(drone_write_map_fd_str, sizeof(drone_write_map_fd_str), "%d", drone_map_fds[1]);
+    snprintf(drone_write_size_fd_str, sizeof(drone_write_size_fd_str), "%d", drone_map_fds[1]);
     snprintf(drone_write_key_fd_str, sizeof(drone_write_key_fd_str), "%d", drone_key_fds[1]);
-    snprintf(input_write_fd_str, sizeof(drone_write_map_fd_str), "%d", input_pipe_fds[1]);
+    snprintf(input_write_fd_str, sizeof(drone_write_size_fd_str), "%d", input_pipe_fds[1]);
     snprintf(drone_read_map_fd_str, sizeof(drone_read_map_fd_str), "%d", drone_map_fds[0]);
     snprintf(drone_read_key_fd_str, sizeof(drone_read_key_fd_str), "%d", drone_key_fds[0]);
-    snprintf(input_read_fd_str, sizeof(drone_read_map_fd_str), "%d", input_pipe_fds[0]);
+    snprintf(input_read_key_fd_str, sizeof(drone_read_map_fd_str), "%d", input_pipe_fds[0]);
     snprintf(obstacle_read_position_fd_str, sizeof(obstacle_read_position_fd_str), "%d", obstacle_position_fds[0]);
     snprintf(target_read_position_fd_str, sizeof(target_read_position_fd_str), "%d", target_position_fds[0]);
     snprintf(obstacle_read_map_fd_str, sizeof(obstacle_read_map_fd_str), "%d", obstacle_map_fds[0]);
     snprintf(target_read_map_fd_str, sizeof(target_read_map_fd_str), "%d", target_map_fds[0]);
-    snprintf(server_write_obstacles_fd_str, sizeof(server_write_obstacles_fd_str), "%d", server_obstacles_fds[1]);
+    snprintf(drone_write_obstacles_fd_str, sizeof(drone_write_obstacles_fd_str), "%d", server_obstacles_fds[1]);
     snprintf(server_read_obstacles_fd_str, sizeof(server_read_obstacles_fd_str), "%d", server_obstacles_fds[0]);
-    snprintf(server_write_targets_fd_str, sizeof(server_write_targets_fd_str), "%d", server_targets_fds[1]);
+    snprintf(drone_write_targets_fd_str, sizeof(drone_write_targets_fd_str), "%d", server_targets_fds[1]);
     snprintf(server_read_targets_fd_str, sizeof(server_read_targets_fd_str), "%d", server_targets_fds[0]);
 
     /* LAUNCH THE SERVER AND THE DRONE */
     pid_t pids[N_PROCS], wd;
     char *inputs[N_PROCS - 1][16] = {
-        {"./server", drone_write_map_fd_str, drone_write_key_fd_str, input_read_fd_str, obstacle_write_map_fd_str, obstacle_read_position_fd_str, target_write_map_fd_str, target_read_position_fd_str, server_write_obstacles_fd_str, server_write_targets_fd_str, pos_str, vel_str, force_str, n_obs, n_target, NULL}, 
-        {"./drone", drone_read_map_fd_str, drone_read_key_fd_str, server_read_obstacles_fd_str, server_read_targets_fd_str, NULL},
+        {"./server", drone_write_size_fd_str, drone_write_key_fd_str, input_read_key_fd_str, obstacle_write_size_fd_str, obstacle_read_position_fd_str, target_write_size_fd_str, target_read_position_fd_str, drone_write_obstacles_fd_str, drone_write_targets_fd_str, pos_str, vel_str, force_str, n_obs, n_target, NULL}, 
+        {"./drone", drone_read_map_fd_str, drone_read_key_fd_str, server_read_obstacles_fd_str, server_read_targets_fd_str, n_obs, n_target, NULL},
         {"./obstacle", obstacle_write_position_fd_str, obstacle_read_map_fd_str, n_obs, NULL},
         {"./target", target_write_position_fd_str, target_read_map_fd_str, n_target, n_target, NULL}
     };

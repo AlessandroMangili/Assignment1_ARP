@@ -13,8 +13,7 @@
 FILE *debug, *errors;           // File descriptors for the two log files
 Game game;
 Drone *drone;
-int server_write_fd;            // File descriptor for sending the size of the map to the server
-Object obstacles, targets;
+int server_write_size_fd;            // File descriptor for sending the size of the map to the server
 int n_obs;
 int n_targ;
 
@@ -29,18 +28,20 @@ void draw_outer_box() {
 void render_obstacles(Object obstacles[]) {
     attron(COLOR_PAIR(3));
     for(int i = 0; i < n_obs; i++){
-        mvprintw(obstacles[i].pos_y, obstacles[i].pos_x, "#");
+        if (obstacles[i].pos_y <= 0 || obstacles[i].pos_x <= 0) continue;
+        mvprintw(obstacles[i].pos_y, obstacles[i].pos_x, "O");
     }
     attroff(COLOR_PAIR(3));
     refresh();
 }
 
 void render_targets(Object targets[]) {
-    attron(COLOR_PAIR(3));
+    attron(COLOR_PAIR(2));
     for(int i = 0; i < n_targ; i++){
-        mvprintw(targets[i].pos_y, targets[i].pos_x, "#");
+        if (targets[i].pos_y <= 0 || targets[i].pos_x <= 0) continue;
+        mvprintw(targets[i].pos_y, targets[i].pos_x, "T");
     }
-    attroff(COLOR_PAIR(3));
+    attroff(COLOR_PAIR(2));
     refresh();
 }
 
@@ -54,7 +55,7 @@ void render_drone(float x, float y) {
 void write_to_server() {
     char buffer[50];
     snprintf(buffer, sizeof(buffer), "%d, %d", game.max_x, game.max_y);
-    write(server_write_fd, buffer, strlen(buffer));
+    write(server_write_size_fd, buffer, strlen(buffer));
 }
 
 // Resize the input window
@@ -112,57 +113,15 @@ int open_shared_memory() {
     return mem_fd;
 }
 
-void map_render(Drone *drone) {
-    /*char buffer[256];
-    fd_set read_fds;
-    struct timeval timeout;*/
-    //while(1){
+void map_render(Drone *drone, Object obstacles[], Object targets[]) {
     clear();
     draw_outer_box();
     render_drone(drone->pos_x, drone->pos_y);
-        //usleep(50000);
-    //}
-
-    /*int max_fd = -1;
-    if (... > max_fd) {
-        max_fd = ...;
-    }
-
-    while(1) {
-        FD_ZERO(&read_fds);
-        FD_SET(..., &read_fds);
-
-        timeout.tv_sec = 0;
-        timeout.tv_usec = 50000;
-        int activity;
-        do {
-            activity = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
-        } while(activity == -1 && errno == EINTR);
-
-        if (activity < 0) {
-            perror("Error in the map's select");
-            LOG_TO_FILE(errors, "Error in select which pipe reads");
-            break;
-        } else if (activity > 0) {
-            // Check if the map process has sent him the map size
-            if (FD_ISSET(..., &read_fds)) {
-                ssize_t bytes_read = read(..., buffer, sizeof(buffer) - 1);
-                if (bytes_read > 0) {
-                    buffer[bytes_read] = '\0'; // End the string
-                    sscanf(buffer, "%d, %d", &game.max_x, &game.max_y);
-                }
-            }
-        } else {
-            clear();
-            draw_outer_box();
-            render_drone(drone->pos_x, drone->pos_y);
-        }
-    }*/
+    render_obstacles(obstacles);
+    render_targets(targets);
 }
 
 int main(int argc, char *argv[]) {
-    
-
     /* OPEN THE LOG FILES */
     debug = fopen("debug.log", "a");
     if (debug == NULL) {
@@ -175,7 +134,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    if (argc < 5) {
+    if (argc < 6) {
         LOG_TO_FILE(errors, "Invalid number of parameters");
         // Close the files
         fclose(debug);
@@ -186,12 +145,10 @@ int main(int argc, char *argv[]) {
     LOG_TO_FILE(debug, "Process started");
 
     /* SETUP THE PIPE */
-    server_write_fd = atoi(argv[1]);
-    int server_read_fd = atoi(argv[2]);
+    server_write_size_fd = atoi(argv[1]);
+    int server_read_obstacle_fd = atoi(argv[2]), server_read_target_fd = atoi(argv[3]);
     n_obs = atoi(argv[3]);
     n_targ = atoi(argv[4]);
-
-    LOG_TO_FILE(errors, argv[2]);
 
     /* SETUP NCURSE */
     initscr(); 
@@ -203,7 +160,7 @@ int main(int argc, char *argv[]) {
     init_pair(1, COLOR_BLUE, COLOR_BLACK);
     init_pair(2, COLOR_GREEN, COLOR_BLACK);
     init_pair(3, COLOR_RED, COLOR_BLACK);
-    init_pair(4, COLOR_CYAN, COLOR_BLACK);
+    init_pair(4, COLOR_YELLOW, COLOR_BLACK);
 
     /* SETUP SIGNALS */
     struct sigaction sa;
@@ -237,19 +194,25 @@ int main(int argc, char *argv[]) {
     // Send to the server the dimension
     write_to_server();
 
+    Object obstacles[n_obs], targets[n_targ];
+    memset(obstacles, 0, sizeof(obstacles));
+    memset(targets, 0, sizeof(targets));
+
     char buffer[256];
     fd_set read_fds;
     struct timeval timeout;
-
     int max_fd = -1;
-    if (server_read_fd > max_fd) {
-        max_fd = server_read_fd;
+    if (server_read_obstacle_fd > max_fd) {
+        max_fd = server_read_obstacle_fd;
     }
-
+    if (server_read_target_fd > max_fd) {
+        max_fd = server_read_target_fd;
+    }
     /* LAUNCH THE MAP */
     while (1) {
         FD_ZERO(&read_fds);
-        FD_SET(server_read_fd, &read_fds);
+        FD_SET(server_read_obstacle_fd, &read_fds);
+        FD_SET(server_read_target_fd, &read_fds);
 
         timeout.tv_sec = 0;
         timeout.tv_usec = 50000;
@@ -264,19 +227,38 @@ int main(int argc, char *argv[]) {
             break;
         } else if (activity > 0) {
             // Check if the map process has sent him the map size
-            if (FD_ISSET(server_read_fd, &read_fds)) {
-                ssize_t bytes_read = read(server_read_fd, buffer, sizeof(buffer) - 1);
+            if (FD_ISSET(server_read_obstacle_fd, &read_fds)) {
+                ssize_t bytes_read = read(server_read_obstacle_fd, buffer, sizeof(buffer) - 1);
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0'; // End the string
-                    //sscanf(buffer, "%d, %d", &game.max_x, &game.max_y);
-                    LOG_TO_FILE(errors, buffer);
+                    char *token = strtok(buffer, "|");
+                    int i = 0;
+                    while (token != NULL) {
+                        sscanf(token, "%d,%d,%d,%c", &obstacles[i].pos_x, &obstacles[i].pos_y, &obstacles[i].point, &obstacles[i].type);
+                        token = strtok(NULL, "|");
+                        i++;
+                    }
+                    map_render(drone, obstacles, targets);
+                }
+            }
+            if (FD_ISSET(server_read_target_fd, &read_fds)) {
+                ssize_t bytes_read = read(server_read_target_fd, buffer, sizeof(buffer) - 1);
+                if (bytes_read > 0) {
+                    buffer[bytes_read] = '\0'; // End the string
+                    char *token = strtok(buffer, "|");
+                    int i = 0;
+                    while (token != NULL) {
+                        sscanf(token, "%d,%d,%d,%c", &targets[i].pos_x, &targets[i].pos_y, &targets[i].point, &targets[i].type);
+                        token = strtok(NULL, "|");
+                        i++;
+                    }
+                    map_render(drone, obstacles, targets);
                 }
             }
         } else {
-            map_render(drone);
+            map_render(drone, obstacles, targets);
         }
-    }    
-    //map_render(drone);
+    }
 
     /* END PROGRAM*/
     endwin();

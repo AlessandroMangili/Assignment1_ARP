@@ -17,7 +17,6 @@ pid_t wd_pid;
 float rho0 = 2, rho1 = 0.5, rho2 = 2, eta = 40;
 Game game;
 Drone *drone;
-//Object obstacles, targets;
 
 float calculate_friction_force(float velocity) {
     return -FRICTION_COEFFICIENT * velocity;
@@ -170,31 +169,30 @@ int open_shared_memory() {
     return mem_fd;
 }
 
-void drone_process(int map_read_fd, int input_read_fd, int obstacles_read_fd, int targets_read_fd) {
+void drone_process(int map_read_size_fd, int input_read_key_fd, int obstacles_read_position_fd, int targets_read_position_fd, Object obstacles[], Object targets[]) {
     char buffer[256];
     fd_set read_fds;
     struct timeval timeout;
 
     int max_fd = -1;
-    if (map_read_fd > max_fd) {
-        max_fd = map_read_fd;
+    if (map_read_size_fd > max_fd) {
+        max_fd = map_read_size_fd;
     }
-    if(input_read_fd > max_fd) {
-        max_fd = input_read_fd;
+    if(input_read_key_fd > max_fd) {
+        max_fd = input_read_key_fd;
     }
-    if(obstacles_read_fd > max_fd) {
-        max_fd = obstacles_read_fd;
+    if(obstacles_read_position_fd > max_fd) {
+        max_fd = obstacles_read_position_fd;
     }
-    if(targets_read_fd > max_fd) {
-        max_fd = targets_read_fd;
+    if(targets_read_position_fd > max_fd) {
+        max_fd = targets_read_position_fd;
     }
-
     while(1) {
         FD_ZERO(&read_fds);
-        FD_SET(map_read_fd, &read_fds);
-        FD_SET(input_read_fd, &read_fds);
-        FD_SET(obstacles_read_fd, &read_fds);
-        FD_SET(targets_read_fd, &read_fds);
+        FD_SET(map_read_size_fd, &read_fds);
+        FD_SET(input_read_key_fd, &read_fds);
+        FD_SET(obstacles_read_position_fd, &read_fds);
+        FD_SET(targets_read_position_fd, &read_fds);
 
         timeout.tv_sec = 1;
         timeout.tv_usec = 0;
@@ -208,15 +206,15 @@ void drone_process(int map_read_fd, int input_read_fd, int obstacles_read_fd, in
             LOG_TO_FILE(errors, "Error in select which pipe reads");
             break;
         } else if (activity > 0) {
-            if (FD_ISSET(map_read_fd, &read_fds)) {
-                ssize_t bytes_read = read(map_read_fd, buffer, sizeof(buffer) - 1);
+            if (FD_ISSET(map_read_size_fd, &read_fds)) {
+                ssize_t bytes_read = read(map_read_size_fd, buffer, sizeof(buffer) - 1);
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0';
                     sscanf(buffer, "%d, %d", &game.max_x, &game.max_y);
                 }
             }
-            if (FD_ISSET(input_read_fd, &read_fds)) {
-                ssize_t bytes_read = read(input_read_fd, buffer, sizeof(buffer) - 1);
+            if (FD_ISSET(input_read_key_fd, &read_fds)) {
+                ssize_t bytes_read = read(input_read_key_fd, buffer, sizeof(buffer) - 1);
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0';
                     //sem_wait(drone->sem);
@@ -224,24 +222,40 @@ void drone_process(int map_read_fd, int input_read_fd, int obstacles_read_fd, in
                     //sem_post(drone->sem);
                 }
             }
-            if (FD_ISSET(obstacles_read_fd, &read_fds)) {
-                ssize_t bytes_read = read(obstacles_read_fd, buffer, sizeof(buffer) - 1);
+            if (FD_ISSET(obstacles_read_position_fd, &read_fds)) {
+                ssize_t bytes_read = read(obstacles_read_position_fd, buffer, sizeof(buffer) - 1);
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0';
-                    //sscanf(buffer, "%d, %d, %d, %c", &objects.pos_x, &objects.pos_y, &objects.point, &objects.type);
-                    LOG_TO_FILE(errors, buffer);
+                    char *token = strtok(buffer, "|");
+                    int i = 0;
+                    while (token != NULL) {
+                        sscanf(token, "%d,%d,%d,%c", &obstacles[i].pos_x, &obstacles[i].pos_y, &obstacles[i].point, &obstacles[i].type);
+                        token = strtok(NULL, "|");
+                        i++;
+                    }
+                    
                 }
             }
-            if (FD_ISSET(targets_read_fd, &read_fds)) {
-                ssize_t bytes_read = read(targets_read_fd, buffer, sizeof(buffer) - 1);
+            if (FD_ISSET(targets_read_position_fd, &read_fds)) {
+                ssize_t bytes_read = read(targets_read_position_fd, buffer, sizeof(buffer) - 1);
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0';
-                    //sscanf(buffer, "%d, %d, %d, %c", &objects.pos_x, &objects.pos_y, &objects.point, &objects.type);
-                    LOG_TO_FILE(errors, buffer);
+                    char *token = strtok(buffer, "|");
+                    int i = 0;
+                    while (token != NULL) {
+                        sscanf(token, "%d,%d,%d,%c", &targets[i].pos_x, &targets[i].pos_y, &targets[i].point, &targets[i].type);
+                        token = strtok(NULL, "|");
+                        i++;
+                    }
                 }
             }
         }
     }
+
+    close(map_read_size_fd);
+    close(input_read_key_fd);
+    close(obstacles_read_position_fd);
+    close(targets_read_position_fd);
 }
 
 int main(int argc, char* argv[]) {
@@ -257,7 +271,7 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    if (argc < 5) {
+    if (argc < 7) {
         LOG_TO_FILE(errors, "Invalid number of parameters");
         // Close the files
         fclose(debug);
@@ -268,10 +282,11 @@ int main(int argc, char* argv[]) {
     LOG_TO_FILE(debug, "Process started");
 
     /* SETUP THE PIPES */
-    int map_read_fd = atoi(argv[1]);
-    int input_read_fd = atoi(argv[2]);
-    int obstacles_read_fd = atoi(argv[3]);
-    int targets_read_fd = atoi(argv[4]);
+    int map_read_size_fd = atoi(argv[1]);
+    int input_read_key_fd = atoi(argv[2]);
+    int obstacles_read_position_fd = atoi(argv[3]);
+    int targets_read_position_fd = atoi(argv[4]);
+    int n_obs = atoi(argv[5]), n_targ = atoi(argv[6]);
 
     /* SETUP THE SIGNALS */
     struct sigaction sa;
@@ -313,7 +328,7 @@ int main(int argc, char* argv[]) {
 
     // Read the size of the map from the server
     char buffer[50];
-    read(map_read_fd, buffer, sizeof(buffer) - 1);
+    read(map_read_size_fd, buffer, sizeof(buffer) - 1);
     sscanf(buffer, "%d, %d", &game.max_x, &game.max_y);
     
     /* UPDATE THE DRONE POSITION */
@@ -328,8 +343,12 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    Object obstacles[n_obs], targets[n_targ];
+    memset(obstacles, 0, sizeof(obstacles));
+    memset(targets, 0, sizeof(targets));
+
     /* LAUNCH THE DRONE */
-    drone_process(map_read_fd, input_read_fd, obstacles_read_fd, targets_read_fd);
+    drone_process(map_read_size_fd, input_read_key_fd, obstacles_read_position_fd, targets_read_position_fd);
 
     /* END PROGRAM */
     // Close the file descriptor

@@ -167,11 +167,11 @@ int open_shared_memory() {
     return mem_fd;
 }
 
-void keyboard_manager(int server_write_fd) {
+void keyboard_manager(int server_write_key_fd) {
     int ch;
     while ((ch = getch()) != 'p' && ch != 'P') {
         if (ch != EOF) {
-            write(server_write_fd, &ch, sizeof(ch));
+            write(server_write_key_fd, &ch, sizeof(ch));
         }
     }
 }
@@ -200,7 +200,7 @@ int main(int argc, char* argv[]) {
     LOG_TO_FILE(debug, "Process started");
 
     /* SETUP THE PIPE */
-    int server_write_fd = atoi(argv[1]);
+    int server_write_key_fd = atoi(argv[1]);
 
     /* OPEN SHARED MEMORY */
     int mem_fd = open_shared_memory();
@@ -267,11 +267,13 @@ int main(int argc, char* argv[]) {
     }
 
     /* LAUNCH THE INPUT PROCESS */
-    keyboard_manager(server_write_fd);
+    keyboard_manager(server_write_key_fd);
 
     /* END PROGRAM */
     // Send the termination signal to the watchdog
     kill(wd_pid, SIGUSR2);
+
+    close(server_write_key_fd);
 
     // Join the thread and destroy the mutex
     pthread_join(info_thread, NULL);
