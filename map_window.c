@@ -229,6 +229,11 @@ int main(int argc, char *argv[]) {
     // Send to the server the dimension
     write_to_server();
 
+    int max_fd = -1;
+    if (server_read_fd > max_fd) {
+        max_fd = server_read_fd;
+    }
+
     /* LAUNCH THE MAP */
     while (1) {
         FD_ZERO(&read_fds);
