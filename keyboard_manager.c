@@ -145,9 +145,9 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
     }
 }
 
-int open_shared_memory() {
-    int mem_fd = shm_open(DRONE_SHARED_MEMORY, O_RDONLY, 0666);
-    if (mem_fd == -1) {
+int open_drone_shared_memory() {
+    int drone_mem_fd = shm_open(DRONE_SHARED_MEMORY, O_RDONLY, 0666);
+    if (drone_mem_fd == -1) {
         perror("Error opening the shared memory");
         LOG_TO_FILE(errors, "Error opening the shared memory");
         // Close the files
@@ -155,7 +155,7 @@ int open_shared_memory() {
         fclose(errors);   
         exit(EXIT_FAILURE);
     }
-    drone = (Drone *)mmap(0, sizeof(Drone), PROT_READ, MAP_SHARED, mem_fd, 0);
+    drone = (Drone *)mmap(0, sizeof(Drone), PROT_READ, MAP_SHARED, drone_mem_fd, 0);
     if (drone == MAP_FAILED) {
         perror("Error mapping the shared memory");
         LOG_TO_FILE(errors, "Error mapping the shared memory");
@@ -164,7 +164,8 @@ int open_shared_memory() {
         fclose(errors);   
         exit(EXIT_FAILURE);
     }
-    return mem_fd;
+    LOG_TO_FILE(debug, "Opened the drone shared memory");
+    return drone_mem_fd;
 }
 
 void keyboard_manager(int server_write_key_fd) {
@@ -203,7 +204,7 @@ int main(int argc, char* argv[]) {
     int server_write_key_fd = atoi(argv[1]);
 
     /* OPEN SHARED MEMORY */
-    int mem_fd = open_shared_memory();
+    int drone_mem_fd = open_drone_shared_memory();
 
     /* SETUP NCURSE */
     initscr();
@@ -290,7 +291,7 @@ int main(int argc, char* argv[]) {
     endwin();
 
     // Close the file descriptor
-    if (close(mem_fd) == -1) {
+    if (close(drone_mem_fd) == -1) {
         perror("Close file descriptor");
         LOG_TO_FILE(errors, "Error in closing the shared memory");
         // Close the files

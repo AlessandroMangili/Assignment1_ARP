@@ -16,6 +16,7 @@ Drone *drone;
 int server_write_size_fd;            // File descriptor for sending the size of the map to the server
 int n_obs;
 int n_targ;
+float *score;
 
 void draw_outer_box() {
     attron(COLOR_PAIR(1));
@@ -91,26 +92,50 @@ void resize_handler(int sig, siginfo_t *info, void *context) {
     }
 }
 
-int open_shared_memory() {
-    int mem_fd = shm_open(DRONE_SHARED_MEMORY, O_RDONLY, 0666);
-    if (mem_fd == -1) {
-        perror("Error opening the shared memory");
-        LOG_TO_FILE(errors, "Error opening the shared memory");
+int open_drone_shared_memory() {
+    int drone_mem_fd = shm_open(DRONE_SHARED_MEMORY, O_RDONLY, 0666);
+    if (drone_mem_fd == -1) {
+        perror("Error opening the drone shared memory");
+        LOG_TO_FILE(errors, "Error opening the drone shared memory");
         // Close the files
         fclose(debug);
         fclose(errors);   
         exit(EXIT_FAILURE);
     }
-    drone = (Drone *)mmap(0, sizeof(Drone), PROT_READ, MAP_SHARED, mem_fd, 0);
+    drone = (Drone *)mmap(0, sizeof(Drone), PROT_READ, MAP_SHARED, drone_mem_fd, 0);
     if (drone == MAP_FAILED) {
-        perror("Error mapping the shared memory");
-        LOG_TO_FILE(errors, "Error mapping the shared memory");
+        perror("Error mapping the drone shared memory");
+        LOG_TO_FILE(errors, "Error mapping the drone shared memory");
         // Close the files
         fclose(debug);
         fclose(errors);   
         exit(EXIT_FAILURE);
     }
-    return mem_fd;
+    LOG_TO_FILE(debug, "Opened the drone shared memory");
+    return drone_mem_fd;
+}
+
+int open_score_shared_memory() {
+    int score_mem_fd = shm_open(SCORE_SHARED_MEMORY, O_RDONLY, 0666);
+    if (score_mem_fd == -1) {
+        perror("Error opening the score shared memory");
+        LOG_TO_FILE(errors, "Error opening the score shared memory");
+        // Close the files
+        fclose(debug);
+        fclose(errors);   
+        exit(EXIT_FAILURE);
+    }
+    score = (float *)mmap(0, sizeof(float), PROT_READ, MAP_SHARED, score_mem_fd, 0);
+    if (score == MAP_FAILED) {
+        perror("Error mapping the score shared memory");
+        LOG_TO_FILE(errors, "Error mapping the score shared memory");
+        // Close the files
+        fclose(debug);
+        fclose(errors);   
+        exit(EXIT_FAILURE);
+    }
+    LOG_TO_FILE(debug, "Opened the score shared memory");
+    return score_mem_fd;
 }
 
 void map_render(Drone *drone, Object obstacles[], Object targets[]) {
@@ -187,7 +212,8 @@ int main(int argc, char *argv[]) {
     }
 
     /* OPEN THE SHARED MEMORY */
-    int mem_fd = open_shared_memory();
+    int drone_mem_fd = open_drone_shared_memory();
+    int score_mem_fd = open_score_shared_memory();
 
     // Retrive the dimension of the terminal
     getmaxyx(stdscr, game.max_y, game.max_x);
@@ -263,9 +289,9 @@ int main(int argc, char *argv[]) {
     /* END PROGRAM*/
     endwin();
     // Close the file descriptor
-    if (close(mem_fd) == -1) {
+    if (close(drone_mem_fd) == -1 || close(score_mem_fd) == -1) {
         perror("Close file descriptor");
-        LOG_TO_FILE(errors, "Error in closing the shared memory");
+        LOG_TO_FILE(errors, "Error closing the file descriptor of the memory");
         // Close the files
         fclose(debug);
         fclose(errors); 
@@ -273,6 +299,7 @@ int main(int argc, char *argv[]) {
     }
     // Unmap the shared memory region
     munmap(drone, sizeof(Drone));
+    munmap(score, sizeof(float));
 
     // Close the files
     fclose(debug);

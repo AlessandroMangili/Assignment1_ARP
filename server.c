@@ -18,6 +18,7 @@ Drone *drone;
 time_t start;
 int n_obs;
 int n_targ;
+float *score = 0;
 
 void server(int drone_write_size_fd, 
             int drone_write_key_fd, 
@@ -94,7 +95,6 @@ void server(int drone_write_size_fd,
                 ssize_t bytes_read = read(obstacle_read_position_fd, buffer, sizeof(buffer) - 1);
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0';
-                    LOG_TO_FILE(errors, buffer);
                     write(drone_write_obstacles_fd, buffer, strlen(buffer));
                     write(map_write_obstacle_fd, buffer, strlen(buffer));
                 }
@@ -104,7 +104,6 @@ void server(int drone_write_size_fd,
                 ssize_t bytes_read = read(target_read_position_fd, buffer, sizeof(buffer) - 1);
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0';
-                    LOG_TO_FILE(errors, buffer);
                     write(drone_write_targets_fd, buffer, strlen(buffer));
                     write(map_write_target_fd, buffer, strlen(buffer));
                 }
@@ -162,9 +161,9 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
     }
 }
 
-int create_shared_memory() {
-    int mem_fd = shm_open(DRONE_SHARED_MEMORY, O_CREAT | O_RDWR, 0666);
-    if (mem_fd == -1) {
+int create_drone_shared_memory() {
+    int drone_mem_fd = shm_open(DRONE_SHARED_MEMORY, O_CREAT | O_RDWR, 0666);
+    if (drone_mem_fd == -1) {
         perror("Error opening the shared memory");
         LOG_TO_FILE(errors, "Error opening the shared memory");
         // Close the files
@@ -174,7 +173,7 @@ int create_shared_memory() {
     }
     
     // Set the size of the shared memory
-    if(ftruncate(mem_fd, sizeof(Drone)) == -1){
+    if(ftruncate(drone_mem_fd, sizeof(Drone)) == -1){
         perror("Error setting the size of the shared memory");
         LOG_TO_FILE(errors, "Error setting the size of the shared memory");
         // Close the files
@@ -184,7 +183,7 @@ int create_shared_memory() {
     }
 
     // Map the shared memory into a drone objects
-    drone = (Drone *)mmap(0, sizeof(Drone), PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd, 0);
+    drone = (Drone *)mmap(0, sizeof(Drone), PROT_READ | PROT_WRITE, MAP_SHARED, drone_mem_fd, 0);
     if (drone == MAP_FAILED) {
         perror("Error mapping the shared memory");
         LOG_TO_FILE(errors, "Error mapping the shared memory");
@@ -193,8 +192,43 @@ int create_shared_memory() {
         fclose(errors);   
         exit(EXIT_FAILURE);
     }
-    LOG_TO_FILE(debug, "Created and opened the shared memory");
-    return mem_fd;
+    LOG_TO_FILE(debug, "Created and opened the drone shared memory");
+    return drone_mem_fd;
+}
+
+int create_score_shared_memory() {
+    int score_mem_fd = shm_open(SCORE_SHARED_MEMORY, O_CREAT | O_RDWR, 0666);
+    if (score_mem_fd == -1) {
+        perror("Error opening the shared memory");
+        LOG_TO_FILE(errors, "Error opening the shared memory");
+        // Close the files
+        fclose(debug);
+        fclose(errors);   
+        exit(EXIT_FAILURE);
+    }
+    
+    // Set the size of the shared memory
+    if(ftruncate(score_mem_fd, sizeof(float)) == -1){
+        perror("Error setting the size of the shared memory");
+        LOG_TO_FILE(errors, "Error setting the size of the shared memory");
+        // Close the files
+        fclose(debug);
+        fclose(errors);   
+        exit(EXIT_FAILURE);
+    }
+
+    // Map the shared memory into a drone objects
+    score = (float *)mmap(0, sizeof(float), PROT_READ | PROT_WRITE, MAP_SHARED, score_mem_fd, 0);
+    if (score == MAP_FAILED) {
+        perror("Error mapping the shared memory");
+        LOG_TO_FILE(errors, "Error mapping the shared memory");
+        // Close the files
+        fclose(debug);
+        fclose(errors);   
+        exit(EXIT_FAILURE);
+    }
+    LOG_TO_FILE(debug, "Created and opened the score shared memory");
+    return score_mem_fd;
 }
 
 void *send_signal_generation_thread() {
@@ -330,7 +364,8 @@ int main(int argc, char *argv[]) {
     snprintf(map_read_target_fd_str, sizeof(map_read_target_fd_str), "%d", pipe3_fd[0]);
 
     /* CREATE THE SHARED MEMORY */
-    int mem_fd = create_shared_memory();
+    int drone_mem_fd = create_drone_shared_memory();
+    int score_mem_fd = create_score_shared_memory();
 
     /* CREATE THE SEMAPHORE */
     sem_unlink("drone_sem");
@@ -442,7 +477,7 @@ int main(int argc, char *argv[]) {
 
     /* END PROGRAM */
     // Unlink the shared memory
-    if (shm_unlink(DRONE_SHARED_MEMORY) == -1) {
+    if (shm_unlink(DRONE_SHARED_MEMORY) == -1 || shm_unlink(SCORE_SHARED_MEMORY) == -1) {
         perror("Unlink shared memory");
         LOG_TO_FILE(errors, "Error unlinking the shared memory");
         // Close the files
@@ -451,7 +486,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
     // Close the file descriptor
-    if (close(mem_fd) == -1) {
+    if (close(drone_mem_fd) == -1 || close(score_mem_fd) == -1) {
         perror("Close file descriptor");
         LOG_TO_FILE(errors, "Error closing the file descriptor of the memory");
         // Close the files
@@ -461,6 +496,7 @@ int main(int argc, char *argv[]) {
     }
     // Unmap the shared memory region
     munmap(drone, sizeof(Drone));
+    munmap(score, sizeof(float));
 
     // Close the semaphore and unlink it
     sem_close(drone->sem);

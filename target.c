@@ -14,7 +14,6 @@
 
 FILE *debug, *errors;
 Game game;
-Drone *drone;
 pid_t wd_pid;
 int N_TARGET;
 int target_write_position_fd = -1;
@@ -59,28 +58,6 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
             generate_targets();
         }
     }
-}
-
-int open_shared_memory() {
-    int mem_fd = shm_open(DRONE_SHARED_MEMORY, O_RDWR, 0666);
-    if (mem_fd == -1) {
-        perror("Error opening the shared memory");
-        LOG_TO_FILE(errors, "Error opening the shared memory");
-        // Close the files
-        fclose(debug);
-        fclose(errors);   
-        exit(EXIT_FAILURE);
-    }
-    drone = (Drone *)mmap(0, sizeof(Drone), PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd, 0);
-    if (drone == MAP_FAILED) {
-        perror("Error mapping the shared memory");
-        LOG_TO_FILE(errors, "Error mapping the shared memory");
-        // Close the files
-        fclose(debug);
-        fclose(errors);   
-        exit(EXIT_FAILURE);
-    }
-    return mem_fd;
 }
 
 int main(int argc, char* argv[]) {
@@ -146,9 +123,6 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    /* OPEN SHARED MEMORY */
-    int mem_fd = open_shared_memory();
-
     char buffer[256];
     fd_set read_fds;
     struct timeval timeout;
@@ -184,18 +158,8 @@ int main(int argc, char* argv[]) {
                 }
             }
         }
-    }    
+    }   
 
-    // Close the file descriptor
-    if (close(mem_fd) == -1) {
-        perror("Close file descriptor");
-        LOG_TO_FILE(errors, "Error in closing the shared memory");
-        // Close the files
-        fclose(debug);
-        fclose(errors); 
-        exit(EXIT_FAILURE);
-    }
-    
     // Close the files
     fclose(debug);
     fclose(errors);
