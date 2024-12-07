@@ -229,7 +229,7 @@ void drone_process(int map_read_fd, int input_read_fd, int obstacles_read_fd, in
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0';
                     //sscanf(buffer, "%d, %d, %d, %c", &objects.pos_x, &objects.pos_y, &objects.point, &objects.type);
-                    sscanf("drone obs %s" buffer);
+                    LOG_TO_FILE(errors, buffer);
                 }
             }
             if (FD_ISSET(targets_read_fd, &read_fds)) {
@@ -237,7 +237,7 @@ void drone_process(int map_read_fd, int input_read_fd, int obstacles_read_fd, in
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0';
                     //sscanf(buffer, "%d, %d, %d, %c", &objects.pos_x, &objects.pos_y, &objects.point, &objects.type);
-                    sscanf("drone trg %s" buffer);
+                    LOG_TO_FILE(errors, buffer);
                 }
             }
         }

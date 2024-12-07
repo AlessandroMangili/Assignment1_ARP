@@ -240,8 +240,8 @@ int main() {
 
     /* LAUNCH THE SERVER AND THE DRONE */
     pid_t pids[N_PROCS], wd;
-    char *inputs[N_PROCS - 1][14] = {
-        {"./server", drone_write_map_fd_str, drone_write_key_fd_str, input_read_fd_str, obstacle_write_map_fd_str, obstacle_read_position_fd_str, target_write_map_fd_str, target_read_position_fd_str, server_write_obstacles_fd_str, server_write_targets_fd_str, pos_str, vel_str, force_str, NULL}, 
+    char *inputs[N_PROCS - 1][16] = {
+        {"./server", drone_write_map_fd_str, drone_write_key_fd_str, input_read_fd_str, obstacle_write_map_fd_str, obstacle_read_position_fd_str, target_write_map_fd_str, target_read_position_fd_str, server_write_obstacles_fd_str, server_write_targets_fd_str, pos_str, vel_str, force_str, n_obs, n_target, NULL}, 
         {"./drone", drone_read_map_fd_str, drone_read_key_fd_str, server_read_obstacles_fd_str, server_read_targets_fd_str, NULL},
         {"./obstacle", obstacle_write_position_fd_str, obstacle_read_map_fd_str, n_obs, NULL},
         {"./target", target_write_position_fd_str, target_read_map_fd_str, n_target, n_target, NULL}

@@ -15,6 +15,8 @@ Game game;
 Drone *drone;
 int server_write_fd;            // File descriptor for sending the size of the map to the server
 Object obstacles, targets;
+int n_obs;
+int n_targ;
 
 void draw_outer_box() {
     attron(COLOR_PAIR(1));
@@ -26,18 +28,18 @@ void draw_outer_box() {
 
 void render_obstacles(Object obstacles[]) {
     attron(COLOR_PAIR(3));
-    /*for(int i = 0; i < N_OBS; i++){
+    for(int i = 0; i < n_obs; i++){
         mvprintw(obstacles[i].pos_y, obstacles[i].pos_x, "#");
-    }*/
+    }
     attroff(COLOR_PAIR(3));
     refresh();
 }
 
 void render_targets(Object targets[]) {
     attron(COLOR_PAIR(3));
-    /*for(int i = 0; i < N_OBS; i++){
-        mvprintw(obstacles[i].pos_y, obstacles[i].pos_x, "#");
-    }*/
+    for(int i = 0; i < n_targ; i++){
+        mvprintw(targets[i].pos_y, targets[i].pos_x, "#");
+    }
     attroff(COLOR_PAIR(3));
     refresh();
 }
@@ -111,15 +113,15 @@ int open_shared_memory() {
 }
 
 void map_render(Drone *drone) {
-    char buffer[256];
+    /*char buffer[256];
     fd_set read_fds;
-    struct timeval timeout;
-    while(1){
-        clear();
-        draw_outer_box();
-        render_drone(drone->pos_x, drone->pos_y);
-        usleep(50000);
-    }
+    struct timeval timeout;*/
+    //while(1){
+    clear();
+    draw_outer_box();
+    render_drone(drone->pos_x, drone->pos_y);
+        //usleep(50000);
+    //}
 
     /*int max_fd = -1;
     if (... > max_fd) {
@@ -159,6 +161,8 @@ void map_render(Drone *drone) {
 }
 
 int main(int argc, char *argv[]) {
+    
+
     /* OPEN THE LOG FILES */
     debug = fopen("debug.log", "a");
     if (debug == NULL) {
@@ -171,7 +175,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    if (argc < 3) {
+    if (argc < 5) {
         LOG_TO_FILE(errors, "Invalid number of parameters");
         // Close the files
         fclose(debug);
@@ -184,6 +188,10 @@ int main(int argc, char *argv[]) {
     /* SETUP THE PIPE */
     server_write_fd = atoi(argv[1]);
     int server_read_fd = atoi(argv[2]);
+    n_obs = atoi(argv[3]);
+    n_targ = atoi(argv[4]);
+
+    LOG_TO_FILE(errors, argv[2]);
 
     /* SETUP NCURSE */
     initscr(); 
@@ -229,6 +237,10 @@ int main(int argc, char *argv[]) {
     // Send to the server the dimension
     write_to_server();
 
+    char buffer[256];
+    fd_set read_fds;
+    struct timeval timeout;
+
     int max_fd = -1;
     if (server_read_fd > max_fd) {
         max_fd = server_read_fd;
@@ -257,7 +269,7 @@ int main(int argc, char *argv[]) {
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0'; // End the string
                     //sscanf(buffer, "%d, %d", &game.max_x, &game.max_y);
-                    printf("%s\n", buffer);
+                    LOG_TO_FILE(errors, buffer);
                 }
             }
         } else {
