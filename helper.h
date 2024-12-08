@@ -6,6 +6,7 @@
 #include <string.h>
 #include <sys/file.h>
 #include <semaphore.h>
+#include <stdbool.h>
 #include <time.h>
 
 #define BOX_HEIGHT 3                            // Height of the box of each key
@@ -13,12 +14,13 @@
 #define TIMEOUT 10                              // Number of seconds after which, if a process does not respond, the watchdog terminates all the processes
 #define N_PROCS 5                               // Number of processes of the watchdog
 #define DRONE_SHARED_MEMORY "/drone_memory"     // Name of the shared memory
-# define SCORE_SHARED_MEMORY "/score_memory"    // Name of the shared memory
+#define SCORE_SHARED_MEMORY "/score_memory"     // Name of the shared memory
 #define MASS 2                                  // Mass (kg) of the drone
 #define FRICTION_COEFFICIENT 0.5                // Friction coefficient of the drone
 #define FORCE_MODULE 1.0                        // Force module
 #define T 0.5                                   // Instant of time (dt)
-#define MAX_FREP 15                         
+#define MAX_FREP 15
+#define HIT_THR 0.5                   
 
 typedef struct {
     float pos_x, pos_y;
@@ -31,6 +33,7 @@ typedef struct {
     int pos_x, pos_y;
     int point;
     char type;
+    bool hit;
 } Object;
 
 typedef struct {

@@ -9,6 +9,7 @@
 #include <math.h>
 #include <errno.h>
 #include <sys/select.h>
+#include <stdbool.h>
 #include <pthread.h>
 #include "helper.h"
 
@@ -18,6 +19,8 @@ float rho0 = 2, rho1 = 0.5, rho2 = 2, eta = 40;
 Game game;
 Drone *drone;
 float *score;
+int n_obs, n_targ;
+Object *obstacles, *targets;
 
 float calculate_friction_force(float velocity) {
     return -FRICTION_COEFFICIENT * velocity;
@@ -59,6 +62,16 @@ float calculate_repulsive_forcey(Drone drone, int xo, int yo) {
     return fy;
 }
 
+void check_hit(Drone *drone, Object *object) {
+    for (int i = 0; i < n_obs; i++) {
+        float distance = sqrt(pow(drone->pos_x - object[i].pos_x, 2) + pow(drone->pos_y - object[i].pos_y, 2));
+        if (distance <= HIT_THR && !object[i].hit) {
+            *score += object[i].point;
+            object[i].hit = true;
+        }
+    }
+}
+
 void update_drone_position(Drone *drone, float dt) {
     float fx_obs = 0;
     float fy_obs = 0;
@@ -85,6 +98,8 @@ void *update_drone_position_thread() {
         //sem_wait(drone->sem);
         update_drone_position(drone, T);
         //sem_post(drone->sem);
+        check_hit(drone, obstacles);
+        check_hit(drone, targets);
         usleep(50000);
     }
 }
@@ -194,7 +209,7 @@ int open_score_shared_memory() {
     return score_mem_fd;
 }
 
-void drone_process(int map_read_size_fd, int input_read_key_fd, int obstacles_read_position_fd, int targets_read_position_fd, Object obstacles[], Object targets[]) {
+void drone_process(int map_read_size_fd, int input_read_key_fd, int obstacles_read_position_fd, int targets_read_position_fd) {
     char buffer[256];
     fd_set read_fds;
     struct timeval timeout;
@@ -254,7 +269,7 @@ void drone_process(int map_read_size_fd, int input_read_key_fd, int obstacles_re
                     char *token = strtok(buffer, "|");
                     int i = 0;
                     while (token != NULL) {
-                        sscanf(token, "%d,%d,%d,%c", &obstacles[i].pos_x, &obstacles[i].pos_y, &obstacles[i].point, &obstacles[i].type);
+                        sscanf(token, "%d,%d,%d,%c,%d", &obstacles[i].pos_x, &obstacles[i].pos_y, &obstacles[i].point, &obstacles[i].type, (int *)&obstacles[i].hit);
                         token = strtok(NULL, "|");
                         i++;
                     }
@@ -268,17 +283,13 @@ void drone_process(int map_read_size_fd, int input_read_key_fd, int obstacles_re
                     char *token = strtok(buffer, "|");
                     int i = 0;
                     while (token != NULL) {
-                        sscanf(token, "%d,%d,%d,%c", &targets[i].pos_x, &targets[i].pos_y, &targets[i].point, &targets[i].type);
+                        sscanf(token, "%d,%d,%d,%c,%d", &targets[i].pos_x, &targets[i].pos_y, &targets[i].point, &targets[i].type, (int *)&targets[i].hit);
                         token = strtok(NULL, "|");
                         i++;
                     }
                 }
             }
-        } /*else {
-            printf("UPDATE");
-            fflush(stdout);
-            update_drone_position(T);
-        }*/
+        }
     }
 
     close(map_read_size_fd);
@@ -315,7 +326,7 @@ int main(int argc, char* argv[]) {
     int input_read_key_fd = atoi(argv[2]);
     int obstacles_read_position_fd = atoi(argv[3]);
     int targets_read_position_fd = atoi(argv[4]);
-    int n_obs = atoi(argv[5]), n_targ = atoi(argv[6]);
+    n_obs = atoi(argv[5]), n_targ = atoi(argv[6]);
 
     /* SETUP THE SIGNALS */
     struct sigaction sa;
@@ -342,9 +353,31 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    obstacles = (Object *)malloc(n_obs * sizeof(Object));
+    if (obstacles == NULL) {
+        perror("Error allocating the memory for the obstacles");
+        LOG_TO_FILE(errors, "Error allocating the memory for the obstacles");
+        // Close the files
+        fclose(debug);
+        fclose(errors); 
+        exit(EXIT_FAILURE);
+    }
+    targets = (Object *)malloc(n_targ * sizeof(Object));
+    if (targets == NULL) {
+        perror("Error allocating the memory for the targets");
+        free(obstacles);
+        LOG_TO_FILE(errors, "Error allocating the memory for the targets");
+        // Close the files
+        fclose(debug);
+        fclose(errors); 
+        exit(EXIT_FAILURE);
+    }
+    memset(obstacles, 0, n_obs * sizeof(obstacles));
+    memset(targets, 0, n_targ * sizeof(targets));
+
     /* OPEN THE SHARED MEMORY */
     int drone_mem_fd = open_drone_shared_memory();
-    //int score_mem_fd = open_score_shared_memory();
+    int score_mem_fd = open_score_shared_memory();
 
     /* IMPORT THE INITIAL CONFIGURATION */
     // Wait 2 seconds
@@ -373,16 +406,12 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    Object obstacles[n_obs], targets[n_targ];
-    memset(obstacles, 0, sizeof(obstacles));
-    memset(targets, 0, sizeof(targets));
-
     /* LAUNCH THE DRONE */
-    drone_process(map_read_size_fd, input_read_key_fd, obstacles_read_position_fd, targets_read_position_fd, obstacles, targets);
+    drone_process(map_read_size_fd, input_read_key_fd, obstacles_read_position_fd, targets_read_position_fd);
 
     /* END PROGRAM */
     // Close the file descriptor
-    if (close(drone_mem_fd) == -1 /*|| close(score_mem_fd) == -1*/) {
+    if (close(drone_mem_fd) == -1 || close(score_mem_fd) == -1) {
         perror("Close file descriptor");
         LOG_TO_FILE(errors, "Error closing the file descriptor of the memory");
         // Close the files
@@ -392,7 +421,10 @@ int main(int argc, char* argv[]) {
     }
     // Unmap the shared memory region
     munmap(drone, sizeof(Drone));
-    //munmap(score, sizeof(float));
+    munmap(score, sizeof(float));
+
+    free(obstacles);
+    free(targets);
     
     // Close the files
     fclose(debug);

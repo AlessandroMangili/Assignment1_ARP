@@ -31,7 +31,8 @@ void generate_obstacles(){
         obstacles[i].pos_y = arc4random_uniform(game.max_y-2) + 1;
         obstacles[i].point = -1;
         obstacles[i].type = 'o';
-        sprintf(temp, i + 1 != N_OBS ? "%d,%d,%d,%c|" : "%d,%d,%d,%c", obstacles[i].pos_x, obstacles[i].pos_y, obstacles[i].point, obstacles[i].type);
+        obstacles[i].hit = false;
+        sprintf(temp, i + 1 != N_OBS ? "%d,%d,%d,%c,%d|" : "%d,%d,%d,%c,%d", obstacles[i].pos_x, obstacles[i].pos_y, obstacles[i].point, obstacles[i].type, (int)obstacles[i].hit);
         strcat(obstacleStr, temp);
     }
     write(obstacle_write_position_fd, obstacleStr, strlen(obstacleStr));

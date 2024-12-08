@@ -21,7 +21,7 @@ float *score;
 void draw_outer_box() {
     attron(COLOR_PAIR(1));
     box(stdscr, 0, 0);
-    mvprintw(0, 1, "Dimension of the window: %d x %d", game.max_x, game.max_y);
+    mvprintw(0, 1, "Dimension of the window: %d x %d - score: %.2f", game.max_x, game.max_y, *score);
     attroff(COLOR_PAIR(1));
     refresh();
 }

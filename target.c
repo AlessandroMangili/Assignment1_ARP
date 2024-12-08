@@ -30,7 +30,8 @@ void generate_targets(){
         targets[i].pos_y = arc4random_uniform(game.max_y-2) + 1;
         targets[i].point = 1;
         targets[i].type = 't';
-        sprintf(temp, i + 1 != N_TARGET ? "%d,%d,%d,%c|" : "%d,%d,%d,%c", targets[i].pos_x, targets[i].pos_y, targets[i].point, targets[i].type);
+        targets[i].hit = false;
+        sprintf(temp, i + 1 != N_TARGET ? "%d,%d,%d,%c,%d|" : "%d,%d,%d,%c,%d", targets[i].pos_x, targets[i].pos_y, targets[i].point, targets[i].type, (int)targets[i].hit);
         strcat(targetStr, temp);
     }
     write(target_write_position_fd, targetStr, strlen(targetStr));
