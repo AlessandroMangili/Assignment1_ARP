@@ -18,7 +18,7 @@ Drone *drone;
 time_t start;
 int n_obs;
 int n_targ;
-float *score = 0;
+float *score;
 
 void server(int drone_write_size_fd, 
             int drone_write_key_fd, 
@@ -227,6 +227,7 @@ int create_score_shared_memory() {
         fclose(errors);   
         exit(EXIT_FAILURE);
     }
+    *score = 0;
     LOG_TO_FILE(debug, "Created and opened the score shared memory");
     return score_mem_fd;
 }

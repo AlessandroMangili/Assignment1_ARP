@@ -62,9 +62,14 @@ float calculate_repulsive_forcey(Drone drone, int xo, int yo) {
     return fy;
 }
 
-void check_hit(Drone *drone, Object *object) {
-    for (int i = 0; i < n_obs; i++) {
-        float distance = sqrt(pow(drone->pos_x - object[i].pos_x, 2) + pow(drone->pos_y - object[i].pos_y, 2));
+void check_hit(Drone *drone, Object *object, int dim) {
+    for (int i = 0; i < dim; i++) {
+        /**
+         * We add 0.5 to the position of each symbol because this way we 
+         * calculate the distance starting from the center of the symbol 
+         * rather than from the top-left corner
+        */ 
+        float distance = sqrt(pow(drone->pos_x - (object[i].pos_x + 0.5), 2) + pow(drone->pos_y - (object[i].pos_y + 0.5), 2));
         if (distance <= HIT_THR && !object[i].hit) {
             *score += object[i].point;
             object[i].hit = true;
@@ -98,8 +103,8 @@ void *update_drone_position_thread() {
         //sem_wait(drone->sem);
         update_drone_position(drone, T);
         //sem_post(drone->sem);
-        check_hit(drone, obstacles);
-        check_hit(drone, targets);
+        check_hit(drone, obstacles, n_obs);
+        check_hit(drone, targets, n_targ);
         usleep(50000);
     }
 }
@@ -107,19 +112,19 @@ void *update_drone_position_thread() {
 void handle_key_pressed(char key, Drone *drone) {
     switch (key) {
         case 'w': case 'W':
-            drone->force_x -= 0.25;
-            drone->force_y -= 0.25;
+            drone->force_x -= 0.1;
+            drone->force_y -= 0.1;
             break;
         case 'e': case 'E':
             drone->force_x -= 0;
-            drone->force_y -= 0.5;
+            drone->force_y -= 0.1;
             break;
         case 'r': case 'R':
-            drone->force_x += 0.25;
-            drone->force_y -= 0.25;
+            drone->force_x += 0.1;
+            drone->force_y -= 0.1;
             break;
         case 's': case 'S':
-            drone->force_x -= 0.5;
+            drone->force_x -= 0.1;
             drone->force_y += 0;
             break;
         case 'd': case 'D':
@@ -127,20 +132,20 @@ void handle_key_pressed(char key, Drone *drone) {
             drone->force_y = 0;
             break;
         case 'f': case 'F':
-            drone->force_x += 0.5;
+            drone->force_x += 0.1;
             drone->force_y += 0;
             break;
         case 'x': case 'X':
-            drone->force_x -= 0.25;
-            drone->force_y += 0.25;
+            drone->force_x -= 0.1;
+            drone->force_y += 0.1;
             break;
         case 'c': case 'C':
             drone->force_x += 0;
-            drone->force_y += 0.5;
+            drone->force_y += 0.1;
             break;
         case 'v': case 'V':
-            drone->force_x += 0.25;
-            drone->force_y += 0.25;
+            drone->force_x += 0.1;
+            drone->force_y += 0.1;
             break;
         default:
             break;
@@ -268,6 +273,7 @@ void drone_process(int map_read_size_fd, int input_read_key_fd, int obstacles_re
                     buffer[bytes_read] = '\0';
                     char *token = strtok(buffer, "|");
                     int i = 0;
+                    memset(obstacles, 0, n_obs * sizeof(obstacles));
                     while (token != NULL) {
                         sscanf(token, "%d,%d,%d,%c,%d", &obstacles[i].pos_x, &obstacles[i].pos_y, &obstacles[i].point, &obstacles[i].type, (int *)&obstacles[i].hit);
                         token = strtok(NULL, "|");
@@ -282,6 +288,7 @@ void drone_process(int map_read_size_fd, int input_read_key_fd, int obstacles_re
                     buffer[bytes_read] = '\0';
                     char *token = strtok(buffer, "|");
                     int i = 0;
+                    memset(targets, 0, n_targ * sizeof(targets));
                     while (token != NULL) {
                         sscanf(token, "%d,%d,%d,%c,%d", &targets[i].pos_x, &targets[i].pos_y, &targets[i].point, &targets[i].type, (int *)&targets[i].hit);
                         token = strtok(NULL, "|");

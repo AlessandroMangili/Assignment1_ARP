@@ -20,7 +20,7 @@
 #define FORCE_MODULE 1.0                        // Force module
 #define T 0.5                                   // Instant of time (dt)
 #define MAX_FREP 15
-#define HIT_THR 0.5                   
+#define HIT_THR 1.0                
 
 typedef struct {
     float pos_x, pos_y;
