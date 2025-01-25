@@ -1,0 +1,5 @@
+struct Message
+{
+    sequence<short> x;
+    sequence<short> y;
+};
