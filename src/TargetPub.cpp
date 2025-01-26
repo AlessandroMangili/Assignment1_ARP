@@ -1,8 +1,3 @@
-/**
- * @file HelloWorldPublisher.cpp
- *
- */
-
 #include "Generated/MessagePubSubTypes.hpp"
 
 #include <chrono>
@@ -16,22 +11,27 @@
 #include <fastdds/dds/topic/TypeSupport.hpp>
 
 #include <random>
+#include "../helper.h"
+#include <signal.h>
 
 using namespace eprosima::fastdds::dds;
 
-class Publishers
+FILE *debug, *errors;
+pid_t wd_pid;
+
+class TargetPub
 {
 private:
 
-    Message obstacleMessage_, targetMessage_;
+    Message message_;
 
     DomainParticipant* participant_;
 
     Publisher* publisher_;
 
-    Topic* topicO_, *topicT_;
+    Topic* topic_;
 
-    DataWriter* writerO_, *writerT_;
+    DataWriter* writer_;
 
     TypeSupport type_;
 
@@ -69,38 +69,30 @@ private:
     } listener_;
 
 public:
+    int n_tgs;
+    int map_x, map_y;
 
-    Publishers()
+    TargetPub()
         : participant_(nullptr)
         , publisher_(nullptr)
-        , topicO_(nullptr)
-        , topicT_(nullptr)
-        , writerO_(nullptr)
-        , writerT_(nullptr)
+        , topic_(nullptr)
+        , writer_(nullptr)
         , type_(new MessagePubSubType())
     {}
 
-    virtual ~Publishers()
+    virtual ~TargetPub()
     {
-        if (writerO_ != nullptr)
+        if (writer_ != nullptr)
         {
-            publisher_->delete_datawriter(writerO_);
-        }
-        if (writerT_ != nullptr)
-        {
-            publisher_->delete_datawriter(writerT_);
+            publisher_->delete_datawriter(writer_);
         }
         if (publisher_ != nullptr)
         {
             participant_->delete_publisher(publisher_);
         }
-        if (topicO_ != nullptr)
+        if (topic_ != nullptr)
         {
-            participant_->delete_topic(topicO_);
-        }
-        if (topicT_ != nullptr)
-        {
-            participant_->delete_topic(topicT_);
+            participant_->delete_topic(topic_);
         }
         DomainParticipantFactory::get_instance()->delete_participant(participant_);
     }
@@ -121,10 +113,9 @@ public:
         type_.register_type(participant_);
 
         // Create the publications Topic
-        topicO_ = participant_->create_topic("ObstaclesTopic", type_.get_type_name(), TOPIC_QOS_DEFAULT);
-        topicT_ = participant_->create_topic("TargetsTopic", type_.get_type_name(), TOPIC_QOS_DEFAULT);
+        topic_ = participant_->create_topic("TargetsTopic", type_.get_type_name(), TOPIC_QOS_DEFAULT);
 
-        if (topicO_ == nullptr || topicT_ == nullptr)
+        if (topic_ == nullptr)
         {
             return false;
         }
@@ -138,13 +129,13 @@ public:
         }
 
         // Create the DataWriter
-        writerO_ = publisher_->create_datawriter(topicO_, DATAWRITER_QOS_DEFAULT, &listener_);
-        writerT_ = publisher_->create_datawriter(topicT_, DATAWRITER_QOS_DEFAULT, &listener_);
+        writer_ = publisher_->create_datawriter(topic_, DATAWRITER_QOS_DEFAULT, &listener_);
 
-        if (writerO_ == nullptr || writerT_ == nullptr)
+        if (writer_ == nullptr)
         {
             return false;
         }
+
         return true;
     }
 
@@ -153,10 +144,8 @@ public:
     {
         if (listener_.matched_ > 0)
         {
-            generate_object(10, 120, 120, true);
-            writerO_->write(&obstacleMessage_);
-            generate_object(10, 120, 120, false);
-            writerT_->write(&targetMessage_);
+            generate_object(n_tgs, map_x, map_y);
+            writer_->write(&message_);
             return true;
         }
         return false;
@@ -172,42 +161,101 @@ public:
         }
     }
 
-    void generate_object(int n_object, int map_x, int map_y, bool is_obstacle){
+    void generate_object(int n_object, int map_x, int map_y){
         std::random_device rd;                              // Seed for randomness
         std::mt19937 gen(rd());                             // Mersenne Twister generator
         std::uniform_int_distribution<> disX(1, map_x - 2); // Range [1, map_x-2]
         std::uniform_int_distribution<> disY(1, map_y - 2); // Range [1, map_y-2]
 
-        if (is_obstacle) {
-            obstacleMessage_.x().clear();
-            obstacleMessage_.y().clear();
-        } else {
-            targetMessage_.x().clear();
-            targetMessage_.y().clear();
-        }
+        message_.x().clear();
+        message_.y().clear();
 
         for (int i = 0; i < n_object; i++){
-            if (is_obstacle) {
-                obstacleMessage_.x().push_back(disX(gen));
-                obstacleMessage_.y().push_back(disY(gen));
-            } else {
-                targetMessage_.x().push_back(disX(gen));
-                targetMessage_.y().push_back(disY(gen));
-            }            
+            message_.x().push_back(disX(gen));
+            message_.y().push_back(disY(gen));           
         }
     }
 };
 
-int main()
-{
-    std::cout << "Starting publisher." << std::endl;
+void signal_handler(int sig, siginfo_t* info, void *context) {
+    if (sig == SIGUSR1) {
+        wd_pid = info->si_pid;
+        LOG_TO_FILE(debug, "Signal SIGUSR1 received from WATCHDOG");
+        kill(wd_pid, SIGUSR1);
+    }
 
-    Publishers* mypub = new Publishers();
-    if(mypub->init())
+    if (sig == SIGUSR2) {
+        LOG_TO_FILE(debug, "Shutting down by the WATCHDOG");
+        // Close the files
+        fclose(errors);
+        fclose(debug);
+        exit(EXIT_SUCCESS);
+    }
+}
+
+int main(int argc, char* argv[])
+{
+    std::cout << "Starting Target publisher." << std::endl;
+    TargetPub* mypub = new TargetPub();
+
+    debug = fopen("debug.log", "a");
+    if (debug == NULL) {
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+    errors = fopen("errors.log", "a");
+    if (errors == NULL) {
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+
+    if (argc < 3) {
+        LOG_TO_FILE(errors, "Invalid number of parameters");
+        // Close the files
+        fclose(debug);
+        fclose(errors); 
+        exit(EXIT_FAILURE);
+    }
+
+    mypub->n_tgs = atoi(argv[1]);
+    mypub->map_x = atoi(argv[2]);
+    mypub->map_y = atoi(argv[3]);
+
+    LOG_TO_FILE(debug, "Process started");
+
+    /* SETTING THE SIGNALS */
+    struct sigaction sa;
+    sa.sa_flags = SA_SIGINFO;
+    sa.sa_sigaction = signal_handler;
+    sigemptyset(&sa.sa_mask);
+
+    // Set the signal handler for SIGUSR1
+    if (sigaction(SIGUSR1, &sa, NULL) == -1) {
+        perror("Error in sigaction(SIGURS1)");
+        LOG_TO_FILE(errors, "Error in sigaction(SIGURS1)");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+    // Set the signal handler for SIGUSR2
+    if(sigaction(SIGUSR2, &sa, NULL) == -1){
+        perror("Error in sigaction(SIGURS2)");
+        LOG_TO_FILE(errors, "Error in sigaction(SIGURS2)");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+
+    if (mypub->init())
     {
         mypub->run();
     }
 
     delete mypub;
+    // Close the files
+    fclose(debug);
+    fclose(errors);
     return 0;
 }

@@ -77,7 +77,12 @@
         "cinttypes": "cpp",
         "typeindex": "cpp",
         "valarray": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "stdbool.h": "c",
+        "wait.h": "c",
+        "stdio.h": "c",
+        "errno.h": "c",
+        "*.ipp": "cpp"
     },
     "C_Cpp.errorSquiggles": "disabled"
 }

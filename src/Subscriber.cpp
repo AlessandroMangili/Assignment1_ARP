@@ -99,7 +99,6 @@ private:
             }
         }
 
-
         Message obstacleMessage_, targetMessage_;
 
         std::atomic_int samples_;

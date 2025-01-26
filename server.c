@@ -27,11 +27,7 @@ void server(int drone_write_size_fd,
             int input_read_key_fd, 
             int map_read_size_fd, 
             int map_write_obstacle_fd,
-            int map_write_target_fd,
-            int obstacle_write_size_fd, 
-            int obstacle_read_position_fd, 
-            int target_write_size_fd, 
-            int target_read_position_fd) {
+            int map_write_target_fd) {
 
     char buffer[2048];
     fd_set read_fds;
@@ -44,19 +40,11 @@ void server(int drone_write_size_fd,
     if(input_read_key_fd > max_fd) {
         max_fd = input_read_key_fd;
     }
-    if (obstacle_read_position_fd > max_fd) {
-        max_fd = obstacle_read_position_fd;
-    }
-    if(target_read_position_fd > max_fd) {
-        max_fd = target_read_position_fd;
-    }
 
     while (1) {
         FD_ZERO(&read_fds);
         FD_SET(input_read_key_fd, &read_fds);
         FD_SET(map_read_size_fd, &read_fds);
-        FD_SET(obstacle_read_position_fd, &read_fds);
-        FD_SET(target_read_position_fd, &read_fds);
 
         timeout.tv_sec = 1;
         timeout.tv_usec = 0;
@@ -77,8 +65,6 @@ void server(int drone_write_size_fd,
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0'; // End the string
                     write(drone_write_size_fd, buffer, strlen(buffer));
-                    write(obstacle_write_size_fd, buffer, strlen(buffer));
-                    write(target_write_size_fd, buffer, strlen(buffer));
                     time(&start);
                 }
             }
@@ -91,23 +77,23 @@ void server(int drone_write_size_fd,
                 }
             }
             // Check if the obstacle process has sent him the position of the obstacles generated
-            if (FD_ISSET(obstacle_read_position_fd, &read_fds)) {
+            /*if (FD_ISSET(obstacle_read_position_fd, &read_fds)) {
                 ssize_t bytes_read = read(obstacle_read_position_fd, buffer, sizeof(buffer) - 1);
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0';
                     write(drone_write_obstacles_fd, buffer, strlen(buffer));
                     write(map_write_obstacle_fd, buffer, strlen(buffer));
                 }
-            }
+            }*/
             // Check if the target process has sent him the position of the targets generated
-            if (FD_ISSET(target_read_position_fd, &read_fds)) {
+            /*if (FD_ISSET(target_read_position_fd, &read_fds)) {
                 ssize_t bytes_read = read(target_read_position_fd, buffer, sizeof(buffer) - 1);
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0';
                     write(drone_write_targets_fd, buffer, strlen(buffer));
                     write(map_write_target_fd, buffer, strlen(buffer));
                 }
-            }
+            }*/
         }
     }    
     // Close file descriptor
@@ -119,10 +105,6 @@ void server(int drone_write_size_fd,
     close(map_write_obstacle_fd);
     close(map_write_target_fd);
     close(input_read_key_fd);
-    close(obstacle_write_size_fd);
-    close(obstacle_read_position_fd);
-    close(target_write_size_fd);
-    close(target_read_position_fd);
 }
 
 void signal_handler(int sig, siginfo_t* info, void *context) {
@@ -311,7 +293,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    if (argc < 15) {
+    if (argc < 10) {
         LOG_TO_FILE(errors, "Invalid number of parameters");
         // Close the files
         fclose(debug);
@@ -325,12 +307,8 @@ int main(int argc, char *argv[]) {
     int drone_write_size_fd = atoi(argv[1]), 
         drone_write_key_fd = atoi(argv[2]), 
         input_read_key_fd = atoi(argv[3]), 
-        obstacle_write_size_fd = atoi(argv[4]), 
-        obstacle_read_position_fd = atoi(argv[5]), 
-        target_write_size_fd = atoi(argv[6]), 
-        target_read_position_fd = atoi(argv[7]),
-        drone_write_obstacles_fd = atoi(argv[8]), 
-        drone_write_targets_fd = atoi(argv[9]); 
+        drone_write_obstacles_fd = atoi(argv[4]), 
+        drone_write_targets_fd = atoi(argv[5]); 
 
     int pipe_fd[2], pipe2_fd[2], pipe3_fd[2];
     if (pipe(pipe_fd) == -1) {
@@ -385,12 +363,12 @@ int main(int argc, char *argv[]) {
     sem_wait(drone->sem);
     // Setting the initial position
     LOG_TO_FILE(debug, "Initialized initial position to the drone");
-    sscanf(argv[10], "%f,%f", &drone->pos_x, &drone->pos_y);
-    sscanf(argv[11], "%f,%f", &drone->vel_x, &drone->vel_y);
-    sscanf(argv[12], "%f,%f", &drone->force_x, &drone->force_y);
+    sscanf(argv[6], "%f,%f", &drone->pos_x, &drone->pos_y);
+    sscanf(argv[7], "%f,%f", &drone->vel_x, &drone->vel_y);
+    sscanf(argv[8], "%f,%f", &drone->force_x, &drone->force_y);
 
-    n_obs = atoi(argv[13]);
-    n_targ = atoi(argv[14]);
+    n_obs = atoi(argv[9]);
+    n_targ = atoi(argv[10]);
 
     char n_obs_str[10];
     snprintf(n_obs_str, sizeof(n_obs_str), "%d", n_obs);
@@ -470,11 +448,7 @@ int main(int argc, char *argv[]) {
             input_read_key_fd, 
             map_read_size_fd, 
             map_write_obstacle_fd, 
-            map_write_target_fd,
-            obstacle_write_size_fd, 
-            obstacle_read_position_fd, 
-            target_write_size_fd, 
-            target_read_position_fd);
+            map_write_target_fd);
 
     /* END PROGRAM */
     // Unlink the shared memory
