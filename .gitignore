@@ -63,4 +63,4 @@ drone
 map_window
 obstacle
 target
-src/Binary
+/src/Binary/
