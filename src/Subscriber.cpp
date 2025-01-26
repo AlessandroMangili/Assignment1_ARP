@@ -85,7 +85,6 @@ private:
             {
                 if (info.valid_data)
                 {
-                    samples_++; // Not valid, you have to split and keep two different counter for each topic
                     std::cout << "Received data from " << currentTopic << ":" << std::endl;
 
                     // Use the correct data based on the topic
@@ -190,10 +189,9 @@ public:
     }
 
     //!Run the Subscriber
-    void run(uint32_t samples)
+    void run()
     {
-        while (listener_.samples_ < samples)
-        {
+        while (true) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
     }
@@ -203,12 +201,11 @@ public:
 int main()
 {
     std::cout << "Starting subscriber." << std::endl;
-    uint32_t samples = 3;
 
     Subscribers* mysub = new Subscribers();
     if (mysub->init())
     {
-        mysub->run(samples);
+        mysub->run();
     }
 
     delete mysub;

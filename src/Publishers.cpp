@@ -163,21 +163,12 @@ public:
     }
 
     //!Run the Publisher
-    void run(uint32_t samples)
+    void run()
     {
-        uint32_t samples_sent = 0;
-        while (samples_sent < samples)
+        while (true)
         {
-            if (publish())
-            {
-                samples_sent++;
-                /*for (int i = 0; i < obstacleMessage_.x().size(); i++) {
-                    std::cout <<"#1: " << obstacleMessage_.x().at(i)
-                          <<" #2: "<< obstacleMessage_.y().at(i)
-                          <<" SENT" << std::endl;
-                }*/
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            publish();
+            std::this_thread::sleep_for(std::chrono::seconds(15));
         }
     }
 
@@ -210,12 +201,11 @@ public:
 int main()
 {
     std::cout << "Starting publisher." << std::endl;
-    uint32_t samples = 3;
 
     Publishers* mypub = new Publishers();
     if(mypub->init())
     {
-        mypub->run(samples);
+        mypub->run();
     }
 
     delete mypub;
