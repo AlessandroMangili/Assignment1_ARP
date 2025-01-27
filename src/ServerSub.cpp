@@ -173,10 +173,10 @@ public:
     bool init()
     {
         DomainParticipantQos participantQos;
-        participantQos.wire_protocol().builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::SIMPLE;
+        //participantQos.wire_protocol().builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::SIMPLE;
         
         participantQos.name("Participant_subscriber");
-        participant_ = DomainParticipantFactory::get_instance()->create_participant(2, participantQos);
+        participant_ = DomainParticipantFactory::get_instance()->create_participant(1, participantQos);
 
         if (participant_ == nullptr)
         {

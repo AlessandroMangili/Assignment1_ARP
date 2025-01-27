@@ -18,6 +18,7 @@ using namespace eprosima::fastdds::dds;
 
 FILE *debug, *errors;
 pid_t wd_pid;
+bool matched = false;
 
 class ObstaclePub
 {
@@ -50,11 +51,13 @@ private:
             if (info.current_count_change == 1)
             {
                 matched_ = info.total_count;
+                matched = true;
                 std::cout << "Publisher matched." << std::endl;
             }
             else if (info.current_count_change == -1)
             {
                 matched_ = info.total_count;
+                matched = false;
                 std::cout << "Publisher unmatched." << std::endl;
             }
             else
@@ -101,7 +104,7 @@ public:
     bool init()
     {
         DomainParticipantQos participantQos;
-        participantQos.wire_protocol().builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::SIMPLE;
+        //participantQos.wire_protocol().builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::SIMPLE;
         //participantQos.wire_protocol().builtin.discovery_config.initial_announcements.count = 5;
 
         participantQos.name("Participant_publisher");
@@ -159,8 +162,10 @@ public:
     {
         while (true)
         {
-            publish();
-            std::this_thread::sleep_for(std::chrono::seconds(15));
+            if (matched) {
+                publish();
+                std::this_thread::sleep_for(std::chrono::seconds(15));
+            }
         }
     }
 
