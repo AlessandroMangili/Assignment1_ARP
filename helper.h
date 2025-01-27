@@ -31,7 +31,6 @@ typedef struct {
 
 typedef struct {
     int pos_x, pos_y;
-    int point;
     char type;
     bool hit;
 } Object;

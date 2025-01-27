@@ -5,13 +5,6 @@ if [ $? -eq 0 ]; then
         echo "Errore durante la compilazione di main.c"
     fi
 
-cc -o "server"  "server.c"
-if [ $? -eq 0 ]; then
-        echo "Compilazione di server.c completata con successo"
-    else
-        echo "Errore durante la compilazione di server.c"
-    fi
-
 cc -o "drone" "drone.c" -lm
 if [ $? -eq 0 ]; then
         echo "Compilazione di drone.c completata con successo"

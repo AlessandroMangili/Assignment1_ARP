@@ -260,7 +260,7 @@ int main(int argc, char *argv[]) {
                     char *token = strtok(buffer, "|");
                     int i = 0;
                     while (token != NULL) {
-                        sscanf(token, "%d,%d,%d,%c", &obstacles[i].pos_x, &obstacles[i].pos_y, &obstacles[i].point, &obstacles[i].type);
+                        sscanf(token, "%d,%d,%c", &obstacles[i].pos_x, &obstacles[i].pos_y, &obstacles[i].type);
                         token = strtok(NULL, "|");
                         i++;
                     }
@@ -274,7 +274,7 @@ int main(int argc, char *argv[]) {
                     char *token = strtok(buffer, "|");
                     int i = 0;
                     while (token != NULL) {
-                        sscanf(token, "%d,%d,%d,%c", &targets[i].pos_x, &targets[i].pos_y, &targets[i].point, &targets[i].type);
+                        sscanf(token, "%d,%d,%c", &targets[i].pos_x, &targets[i].pos_y, &targets[i].type);
                         token = strtok(NULL, "|");
                         i++;
                     }

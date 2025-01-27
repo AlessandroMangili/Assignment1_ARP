@@ -1,111 +1,277 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
+#include "Generated/MessagePubSubTypes.hpp"
+
+#include <chrono>
+#include <thread>
+
+#include <fastdds/dds/domain/DomainParticipant.hpp>
+#include <fastdds/dds/domain/DomainParticipantFactory.hpp>
+#include <fastdds/dds/subscriber/DataReader.hpp>
+#include <fastdds/dds/subscriber/DataReaderListener.hpp>
+#include <fastdds/dds/subscriber/qos/DataReaderQos.hpp>
+#include <fastdds/dds/subscriber/SampleInfo.hpp>
+#include <fastdds/dds/subscriber/Subscriber.hpp>
+#include <fastdds/dds/topic/TypeSupport.hpp>
+
+#include "../helper.h"
 #include <signal.h>
-#include <fcntl.h>
-#include <sys/select.h>
-#include <string.h>
-#include <sys/time.h>
 #include <sys/mman.h>
-#include <semaphore.h>
-#include <errno.h>
-#include <pthread.h>
-#include "helper.h"
+#include <sys/select.h>
+
+using namespace eprosima::fastdds::dds;
 
 FILE *debug, *errors;       // File descriptors for the two log files
-pid_t wd_pid, map_pid, obs_pid, targ_pid;
+pid_t wd_pid, map_pid;
 Drone *drone;
-time_t start;
 int n_obs;
 int n_targ;
 float *score;
 
-void server(int drone_write_size_fd, 
-            int drone_write_key_fd, 
-            int drone_write_obstacles_fd, 
-            int drone_write_targets_fd, 
-            int input_read_key_fd, 
-            int map_read_size_fd, 
-            int map_write_obstacle_fd,
-            int map_write_target_fd) {
+int drone_write_targets_fd, map_write_target_fd;
+int drone_write_obstacles_fd, map_write_obstacle_fd;
 
-    char buffer[2048];
-    fd_set read_fds;
-    struct timeval timeout;
+class ServerSub
+{
+private:
 
-    int max_fd = -1;
-    if (map_read_size_fd > max_fd) {
-        max_fd = map_read_size_fd;
-    }
-    if(input_read_key_fd > max_fd) {
-        max_fd = input_read_key_fd;
-    }
+    DomainParticipant* participant_;
 
-    while (1) {
-        FD_ZERO(&read_fds);
-        FD_SET(input_read_key_fd, &read_fds);
-        FD_SET(map_read_size_fd, &read_fds);
+    Subscriber* subscriber_;
 
-        timeout.tv_sec = 1;
-        timeout.tv_usec = 0;
-        int activity;
-        do {
-            activity = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
-        } while(activity == -1 && errno == EINTR);
+    DataReader* readerO_, *readerT_;
 
-        if (activity < 0) {
-            perror("Error in the server's select");
-            LOG_TO_FILE(errors, "Error in select which pipe reads");
-            break;
-        } else if (activity > 0) {
-            memset(buffer, '\0', sizeof(buffer));
-            // Check if the map process has sent him the map size
-            if (FD_ISSET(map_read_size_fd, &read_fds)) {
-                ssize_t bytes_read = read(map_read_size_fd, buffer, sizeof(buffer) - 1);
-                if (bytes_read > 0) {
-                    buffer[bytes_read] = '\0'; // End the string
-                    write(drone_write_size_fd, buffer, strlen(buffer));
-                    time(&start);
-                }
+    Topic* topicO_, *topicT_;
+
+    TypeSupport type_;
+
+    class SubListener : public DataReaderListener
+    {
+    public:
+
+        SubListener() : samples_(0) {}
+
+        ~SubListener() override {}
+
+        void on_subscription_matched(
+                DataReader*,
+                const SubscriptionMatchedStatus& info) override
+        {
+            if (info.current_count_change == 1)
+            {
+                std::cout << "Subscriber matched." << std::endl;
             }
-            // Check if the input process has sent him a key that was pressed
-            if (FD_ISSET(input_read_key_fd, &read_fds)) {
-                ssize_t bytes_read = read(input_read_key_fd, buffer, sizeof(buffer) - 1);
-                if (bytes_read > 0) {
-                    buffer[bytes_read] = '\0';
-                    write(drone_write_key_fd, buffer, strlen(buffer));
-                }
+            else if (info.current_count_change == -1)
+            {
+                std::cout << "Subscriber unmatched." << std::endl;
             }
-            // Check if the obstacle process has sent him the position of the obstacles generated
-            /*if (FD_ISSET(obstacle_read_position_fd, &read_fds)) {
-                ssize_t bytes_read = read(obstacle_read_position_fd, buffer, sizeof(buffer) - 1);
-                if (bytes_read > 0) {
-                    buffer[bytes_read] = '\0';
-                    write(drone_write_obstacles_fd, buffer, strlen(buffer));
-                    write(map_write_obstacle_fd, buffer, strlen(buffer));
-                }
-            }*/
-            // Check if the target process has sent him the position of the targets generated
-            /*if (FD_ISSET(target_read_position_fd, &read_fds)) {
-                ssize_t bytes_read = read(target_read_position_fd, buffer, sizeof(buffer) - 1);
-                if (bytes_read > 0) {
-                    buffer[bytes_read] = '\0';
-                    write(drone_write_targets_fd, buffer, strlen(buffer));
-                    write(map_write_target_fd, buffer, strlen(buffer));
-                }
-            }*/
+            else
+            {
+                std::cout << info.current_count_change
+                          << " is not a valid value for SubscriptionMatchedStatus current count change" << std::endl;
+            }
         }
-    }    
-    // Close file descriptor
-    close(drone_write_size_fd);
-    close(drone_write_key_fd);
-    close(drone_write_obstacles_fd);
-    close(drone_write_targets_fd);
-    close(map_read_size_fd);
-    close(map_write_obstacle_fd);
-    close(map_write_target_fd);
-    close(input_read_key_fd);
-}
+
+        void on_data_available(
+                DataReader* reader) override
+        {
+            SampleInfo info;
+            auto topicName = reader->get_topicdescription()->get_name();
+            
+            // Decide which message to process based on the topic name
+            Message* currentMessage = nullptr;
+            std::string currentTopic = "";
+
+            if (topicName == "ObstaclesTopic") {
+                currentMessage = &obstacleMessage_;
+                currentTopic = "ObstaclesTopic";
+            }
+            else if (topicName == "TargetsTopic") {
+                currentMessage = &targetMessage_;
+                currentTopic = "TargetsTopic";
+            }
+
+            // Process the message if it's a valid topic
+            if (currentMessage != nullptr && reader->take_next_sample(currentMessage, &info) == eprosima::fastdds::dds::RETCODE_OK)
+            {
+                if (info.valid_data)
+                {
+                    std::cout << "Received data from " << currentTopic << ":" << std::endl;
+
+                    // Use the correct data based on the topic
+                    std::vector<Object> objects(currentMessage->x().size());
+                    std::string objectStr;
+                    for (int i = 0; i < currentMessage->x().size(); i++) {
+                        objects[i] = {currentMessage->x()[i], currentMessage->y()[i], (topicName == "ObstaclesTopic" ? 'o' : 't'), false};
+
+                        objectStr += std::to_string(objects[i].pos_x) + "," + std::to_string(objects[i].pos_y) + "," + objects[i].type + "," + std::to_string(objects[i].hit ? 1 : 0);
+                        if (i + 1 < currentMessage->x().size()) 
+                            objectStr += "|";
+
+                        std::cout << "Index: " << i + 1
+                                << " X: " << currentMessage->x().at(i)
+                                << " Y: " << currentMessage->y().at(i)
+                                << " SENT" << std::endl;
+                    }
+                    std::cout << std::endl;
+
+                    if (topicName == "ObstaclesTopic") {
+                        write(drone_write_obstacles_fd, objectStr.c_str(), objectStr.size());
+                        write(map_write_obstacle_fd, objectStr.c_str(), objectStr.size());
+                    }
+                    else if (topicName == "TargetsTopic") {
+                        write(drone_write_targets_fd, objectStr.c_str(), objectStr.size());
+                        write(map_write_target_fd, objectStr.c_str(), objectStr.size());
+                    }
+                }
+            }
+        }
+
+        Message obstacleMessage_, targetMessage_;
+
+        std::atomic_int samples_;
+
+    } listener_;
+
+public:
+
+    ServerSub()
+        : participant_(nullptr)
+        , subscriber_(nullptr)
+        , topicO_(nullptr)
+        , topicT_(nullptr)
+        , readerO_(nullptr)
+        , readerT_(nullptr)
+        , type_(new MessagePubSubType())
+    {
+    }
+
+    virtual ~ServerSub()
+    {
+        if (readerO_ != nullptr)
+        {
+            subscriber_->delete_datareader(readerO_);
+        }
+        if (readerT_ != nullptr)
+        {
+            subscriber_->delete_datareader(readerT_);
+        }
+        if (topicO_ != nullptr)
+        {
+            participant_->delete_topic(topicO_);
+        }
+        if (topicT_ != nullptr)
+        {
+            participant_->delete_topic(topicT_);
+        }
+        if (subscriber_ != nullptr)
+        {
+            participant_->delete_subscriber(subscriber_);
+        }
+        DomainParticipantFactory::get_instance()->delete_participant(participant_);
+    }
+
+    //!Initialize the subscriber
+    bool init()
+    {
+        DomainParticipantQos participantQos;
+        participantQos.name("Participant_subscriber");
+        participant_ = DomainParticipantFactory::get_instance()->create_participant(1, participantQos);
+
+        if (participant_ == nullptr)
+        {
+            return false;
+        }
+
+        // Register the Type
+        type_.register_type(participant_);
+
+        // Create the subscriptions Topic
+        topicO_ = participant_->create_topic("ObstaclesTopic", type_.get_type_name(), TOPIC_QOS_DEFAULT);
+        topicT_ = participant_->create_topic("TargetsTopic", type_.get_type_name(), TOPIC_QOS_DEFAULT);
+
+        if (topicO_ == nullptr || topicT_ == nullptr)
+        {
+            return false;
+        }
+
+        // Create the Subscriber
+        subscriber_ = participant_->create_subscriber(SUBSCRIBER_QOS_DEFAULT, nullptr);
+
+        if (subscriber_ == nullptr)
+        {
+            return false;
+        }
+
+        // Create the DataReader
+        readerO_ = subscriber_->create_datareader(topicO_, DATAREADER_QOS_DEFAULT, &listener_);
+        readerT_ = subscriber_->create_datareader(topicT_, DATAREADER_QOS_DEFAULT, &listener_);
+
+        if (readerO_ == nullptr || readerT_ == nullptr)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    //!Run the Subscriber
+    void run(int drone_write_size_fd, int drone_write_key_fd, int input_read_key_fd, int map_read_size_fd)
+    {
+        char buffer[2048];
+        fd_set read_fds;
+        struct timeval timeout;
+
+        int max_fd = -1;
+        if (map_read_size_fd > max_fd) {
+            max_fd = map_read_size_fd;
+        }
+        if(input_read_key_fd > max_fd) {
+            max_fd = input_read_key_fd;
+        }
+
+        while (1) {
+            FD_ZERO(&read_fds);
+            FD_SET(input_read_key_fd, &read_fds);
+            FD_SET(map_read_size_fd, &read_fds);
+
+            timeout.tv_sec = 1;
+            timeout.tv_usec = 0;
+            int activity;
+            do {
+                activity = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
+            } while(activity == -1 && errno == EINTR);
+
+            if (activity < 0) {
+                perror("Error in the server's select");
+                LOG_TO_FILE(errors, "Error in select which pipe reads");
+                break;
+            } else if (activity > 0) {
+                memset(buffer, '\0', sizeof(buffer));
+                // Check if the map process has sent him the map size
+                if (FD_ISSET(map_read_size_fd, &read_fds)) {
+                    ssize_t bytes_read = read(map_read_size_fd, buffer, sizeof(buffer) - 1);
+                    if (bytes_read > 0) {
+                        buffer[bytes_read] = '\0'; // End the string
+                        write(drone_write_size_fd, buffer, strlen(buffer));
+                    }
+                }
+                // Check if the input process has sent him a key that was pressed
+                if (FD_ISSET(input_read_key_fd, &read_fds)) {
+                    ssize_t bytes_read = read(input_read_key_fd, buffer, sizeof(buffer) - 1);
+                    if (bytes_read > 0) {
+                        buffer[bytes_read] = '\0';
+                        write(drone_write_key_fd, buffer, strlen(buffer));
+                    }
+                }
+            }
+        }    
+        // Close file descriptor
+        close(drone_write_size_fd);
+        close(drone_write_key_fd);
+        close(map_read_size_fd);
+        close(input_read_key_fd);   
+    }
+
+};
 
 void signal_handler(int sig, siginfo_t* info, void *context) {
     if (sig == SIGUSR1) {
@@ -214,73 +380,11 @@ int create_score_shared_memory() {
     return score_mem_fd;
 }
 
-void *send_signal_generation_thread() {
-    time_t finish;
-    double diff; 
-    pid_t pid_t_o[] = {targ_pid, obs_pid};
+int main(int argc, char* argv[])
+{
+    std::cout << "Starting Server subscriber" << std::endl;
+    ServerSub* mysub = new ServerSub();
 
-    while(1) {
-        time(&start);
-        do {
-            time(&finish);
-            diff = difftime(finish, start);
-        } while (diff < 15);
-
-        for(int i = 0; i < 2; i++) {
-            if(pid_t_o[i] < 0) continue;
-            
-            if (kill(pid_t_o[i], SIGTERM) == -1) {
-                perror("Error sending signal kill");
-                switch (i) {
-                    case 0:
-                        LOG_TO_FILE(errors, "Error sending signal kill to the TARGET");
-                        break;
-                    case 1:
-                        LOG_TO_FILE(errors, "Error sending signal kill to the OBSTACLE");
-                        break;
-                }
-            }
-        }
-    }
-}
-
-int get_pid_by_command(const char *process_name) {
-    char command[256];
-    char buffer[1024];
-    FILE *pipe;
-    int pid = -1;
-
-    /*Per sistei più lenti bisogna aumentare la sleep altrimenti 
-    target e obstacle non vengono avviati in tempo*/
-
-    sleep(2);
-
-    // Costruisci il comando ps aux | grep <process_name>
-    snprintf(command, sizeof(command), "ps aux | grep '%s' | grep -v 'grep'", process_name);
-
-    // Esegui il comando usando popen
-    pipe = popen(command, "r");
-    if (!pipe) {
-        perror("popen");
-        return -1;
-    }
-
-    // Leggi l'output del comando
-    while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
-        // Analizza l'output per estrarre il PID
-        char user[32], cmd_part[128];
-        if (sscanf(buffer, "%s %d %*f %*f %*f %*f %*s %*s %*s %*s %[^\n]", user, &pid, cmd_part) == 3) {
-            if (strstr(cmd_part, process_name) != NULL) {
-                break; // Trovato il PID, esci dal loop
-            }
-        }
-    }
-
-    pclose(pipe);
-    return pid; // Ritorna il PID trovato, o -1 se non trovato
-}
-
-int main(int argc, char *argv[]) {
     /* OPEN THE LOG FILES */
     debug = fopen("debug.log", "a");
     if (debug == NULL) {
@@ -306,9 +410,10 @@ int main(int argc, char *argv[]) {
     /* CREATE AND SETUP THE PIPES */
     int drone_write_size_fd = atoi(argv[1]), 
         drone_write_key_fd = atoi(argv[2]), 
-        input_read_key_fd = atoi(argv[3]), 
-        drone_write_obstacles_fd = atoi(argv[4]), 
-        drone_write_targets_fd = atoi(argv[5]); 
+        input_read_key_fd = atoi(argv[3]);
+
+    drone_write_obstacles_fd = atoi(argv[4]), 
+    drone_write_targets_fd = atoi(argv[5]); 
 
     int pipe_fd[2], pipe2_fd[2], pipe3_fd[2];
     if (pipe(pipe_fd) == -1) {
@@ -336,7 +441,8 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
     int map_read_size_fd = pipe_fd[0];
-    int map_write_obstacle_fd = pipe2_fd[1], map_write_target_fd = pipe3_fd[1];
+    map_write_obstacle_fd = pipe2_fd[1];
+    map_write_target_fd = pipe3_fd[1];
     char map_write_size_fd_str[10], map_read_obstacle_fd_str[10], map_read_target_fd_str[10];
     snprintf(map_write_size_fd_str, sizeof(map_write_size_fd_str), "%d", pipe_fd[1]);
     snprintf(map_read_obstacle_fd_str, sizeof(map_read_obstacle_fd_str), "%d", pipe2_fd[0]);
@@ -424,33 +530,15 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    obs_pid = get_pid_by_command("./obstacle");
-    targ_pid = get_pid_by_command("./target");
-
     usleep(50000);
 
-    // LAUNCH THE THREAD FOR PERIODIC SIGNAL
-    pthread_t server_thread;
-    if (pthread_create(&server_thread, NULL, send_signal_generation_thread, NULL) != 0) {
-        perror("Error creating the thread for updating the drone's information");
-        LOG_TO_FILE(errors, "Error creating the thread for updating the drone's information");
-        // Close the files
-        fclose(debug);
-        fclose(errors);   
-        exit(EXIT_FAILURE);
+    
+    if (mysub->init())
+    {
+        mysub->run(drone_write_size_fd, drone_write_key_fd, input_read_key_fd, map_read_size_fd);
     }
 
-    /* LAUNCH THE SERVER */
-    server(drone_write_size_fd, 
-            drone_write_key_fd, 
-            drone_write_obstacles_fd, 
-            drone_write_targets_fd, 
-            input_read_key_fd, 
-            map_read_size_fd, 
-            map_write_obstacle_fd, 
-            map_write_target_fd);
-
-    /* END PROGRAM */
+        /* END PROGRAM */
     // Unlink the shared memory
     if (shm_unlink(DRONE_SHARED_MEMORY) == -1 || shm_unlink(SCORE_SHARED_MEMORY) == -1) {
         perror("Unlink shared memory");
@@ -480,6 +568,7 @@ int main(int argc, char *argv[]) {
     // Close the files
     fclose(debug);
     fclose(errors); 
-      
+
+    delete mysub;
     return 0;
 }
