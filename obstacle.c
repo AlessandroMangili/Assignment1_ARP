@@ -29,10 +29,9 @@ void generate_obstacles(){
         // generates random coordinates
         obstacles[i].pos_x = arc4random_uniform(game.max_x-2) + 1; 
         obstacles[i].pos_y = arc4random_uniform(game.max_y-2) + 1;
-        obstacles[i].point = -1;
         obstacles[i].type = 'o';
         obstacles[i].hit = false;
-        sprintf(temp, i + 1 != N_OBS ? "%d,%d,%d,%c,%d|" : "%d,%d,%d,%c,%d", obstacles[i].pos_x, obstacles[i].pos_y, obstacles[i].point, obstacles[i].type, (int)obstacles[i].hit);
+        sprintf(temp, i + 1 != N_OBS ? "%d,%d,%c,%d|" : "%d,%d,%c,%d", obstacles[i].pos_x, obstacles[i].pos_y, obstacles[i].type, (int)obstacles[i].hit);
         strcat(obstacleStr, temp);
     }
     write(obstacle_write_position_fd, obstacleStr, strlen(obstacleStr));

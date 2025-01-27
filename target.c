@@ -28,10 +28,9 @@ void generate_targets(){
         // generates random coordinates
         targets[i].pos_x = arc4random_uniform(game.max_x-2) + 1; 
         targets[i].pos_y = arc4random_uniform(game.max_y-2) + 1;
-        targets[i].point = 1;
         targets[i].type = 't';
         targets[i].hit = false;
-        sprintf(temp, i + 1 != N_TARGET ? "%d,%d,%d,%c,%d|" : "%d,%d,%d,%c,%d", targets[i].pos_x, targets[i].pos_y, targets[i].point, targets[i].type, (int)targets[i].hit);
+        sprintf(temp, i + 1 != N_TARGET ? "%d,%d,%c,%d|" : "%d,%d,%c,%d", targets[i].pos_x, targets[i].pos_y, targets[i].type, (int)targets[i].hit);
         strcat(targetStr, temp);
     }
     write(target_write_position_fd, targetStr, strlen(targetStr));

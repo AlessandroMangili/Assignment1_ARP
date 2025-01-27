@@ -71,7 +71,7 @@ void check_hit(Drone *drone, Object *object, int dim) {
         */ 
         float distance = sqrt(pow(drone->pos_x - (object[i].pos_x + 0.5), 2) + pow(drone->pos_y - (object[i].pos_y + 0.5), 2));
         if (distance <= HIT_THR && !object[i].hit) {
-            *score += object[i].point;
+            *score += object[i].type == 't' ? 1 : 0;
             object[i].hit = true;
         }
     }
@@ -100,9 +100,7 @@ void update_drone_position(Drone *drone, float dt) {
 
 void *update_drone_position_thread() {
     while (1) {
-        //sem_wait(drone->sem);
         update_drone_position(drone, T);
-        //sem_post(drone->sem);
         check_hit(drone, obstacles, n_obs);
         check_hit(drone, targets, n_targ);
         usleep(50000);
@@ -262,9 +260,7 @@ void drone_process(int map_read_size_fd, int input_read_key_fd, int obstacles_re
                 ssize_t bytes_read = read(input_read_key_fd, buffer, sizeof(buffer) - 1);
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0';
-                    //sem_wait(drone->sem);
                     handle_key_pressed(buffer[0], drone);
-                    //sem_post(drone->sem);
                 }
             }
             if (FD_ISSET(obstacles_read_position_fd, &read_fds)) {
@@ -275,7 +271,7 @@ void drone_process(int map_read_size_fd, int input_read_key_fd, int obstacles_re
                     int i = 0;
                     memset(obstacles, 0, n_obs * sizeof(obstacles));
                     while (token != NULL) {
-                        sscanf(token, "%d,%d,%d,%c,%d", &obstacles[i].pos_x, &obstacles[i].pos_y, &obstacles[i].point, &obstacles[i].type, (int *)&obstacles[i].hit);
+                        sscanf(token, "%d,%d,%c,%d", &obstacles[i].pos_x, &obstacles[i].pos_y, &obstacles[i].type, (int *)&obstacles[i].hit);
                         token = strtok(NULL, "|");
                         i++;
                     }
@@ -290,7 +286,7 @@ void drone_process(int map_read_size_fd, int input_read_key_fd, int obstacles_re
                     int i = 0;
                     memset(targets, 0, n_targ * sizeof(targets));
                     while (token != NULL) {
-                        sscanf(token, "%d,%d,%d,%c,%d", &targets[i].pos_x, &targets[i].pos_y, &targets[i].point, &targets[i].type, (int *)&targets[i].hit);
+                        sscanf(token, "%d,%d,%c,%d", &targets[i].pos_x, &targets[i].pos_y, &targets[i].type, (int *)&targets[i].hit);
                         token = strtok(NULL, "|");
                         i++;
                     }
