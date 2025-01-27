@@ -101,6 +101,9 @@ public:
     bool init()
     {
         DomainParticipantQos participantQos;
+        participantQos.wire_protocol().builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::SIMPLE;
+        //participantQos.wire_protocol().builtin.discovery_config.initial_announcements.count = 5;
+
         participantQos.name("Participant_publisher");
         participant_ = DomainParticipantFactory::get_instance()->create_participant(1, participantQos);
 
