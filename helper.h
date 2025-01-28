@@ -17,7 +17,7 @@
 #define SCORE_SHARED_MEMORY "/score_memory"     // Name of the shared memory
 #define MASS 2                                  // Mass (kg) of the drone
 #define FRICTION_COEFFICIENT 0.5                // Friction coefficient of the drone
-#define FORCE_MODULE 1.0                        // Force module
+#define FORCE_MODULE 0.2                        // Force module
 #define T 0.5                                   // Instant of time (dt)
 #define MAX_FREP 15
 #define HIT_THR 1.0                
