@@ -111,7 +111,6 @@ private:
                                 << " Y: " << currentMessage->y().at(i)
                                 << " SENT" << std::endl;
                     }
-                    std::cout << std::endl;
 
                     if (topicName == "ObstaclesTopic") {
                         write(drone_write_obstacles_fd, objectStr.c_str(), objectStr.size());

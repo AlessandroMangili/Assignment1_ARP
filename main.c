@@ -4,6 +4,7 @@
 #include <signal.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <semaphore.h>
 #include <stdbool.h>
 #include "cJSON/cJSON.h"
 #include "helper.h"
@@ -228,6 +229,14 @@ int main() {
     snprintf(drone_write_targets_fd_str, sizeof(drone_write_targets_fd_str), "%d", server_targets_fds[1]);
     snprintf(server_read_targets_fd_str, sizeof(server_read_targets_fd_str), "%d", server_targets_fds[0]);
 
+    sem_unlink("/sync_semaphore");
+    sem_t *sync_sem = sem_open("/sync_semaphore", O_CREAT | O_EXCL, 0666, 0);
+    if (sync_sem == SEM_FAILED) {
+        LOG_TO_FILE(errors, "Failed to open the semaphore");
+        perror("sem_open");
+        exit(EXIT_FAILURE);
+    }
+
     /* LAUNCH THE SERVER AND THE DRONE */
     pid_t pids[N_PROCS], wd;
     char *inputs[N_PROCS - 1][16] = {
@@ -309,12 +318,16 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
+
     for(int i = 0; i < N_PROCS; i++) {
         wait(NULL);
     }
     wait(NULL);
 
     /* END PROGRAM */
+
+    sem_close(sync_sem);
+    sem_unlink("/sync_semaphore");
 
     // Close the files
     fclose(debug);

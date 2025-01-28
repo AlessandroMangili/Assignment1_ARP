@@ -13,6 +13,7 @@
 #include <random>
 #include "../helper.h"
 #include <signal.h>
+#include <semaphore.h>
 
 using namespace eprosima::fastdds::dds;
 
@@ -159,6 +160,16 @@ public:
     //!Run the Publisher
     void run()
     {
+        sem_t *sync_sem = sem_open("/sync_semaphore", 0);
+        if (sync_sem == SEM_FAILED) {
+            LOG_TO_FILE(errors, "Failed to open the semaphore");
+            perror("sem_open");
+            return;
+        }
+
+        sem_post(sync_sem);
+        sem_close(sync_sem);
+
         while (true)
         {
             if (matched) {

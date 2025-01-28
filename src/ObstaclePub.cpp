@@ -13,6 +13,7 @@
 #include <random>
 #include "../helper.h"
 #include <signal.h>
+#include <semaphore.h>
 
 using namespace eprosima::fastdds::dds;
 
@@ -160,6 +161,16 @@ public:
     //!Run the Publisher
     void run()
     {
+        sem_t *sync_sem = sem_open("/sync_semaphore", 0);
+        if (sync_sem == SEM_FAILED) {
+            LOG_TO_FILE(errors, "Failed to open the semaphore");
+            perror("sem_open");
+            return;
+        }
+
+        sem_wait(sync_sem);
+        sem_close(sync_sem);
+
         while (true)
         {
             if (matched) {
@@ -203,6 +214,8 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
 
 int main(int argc, char* argv[])
 {
+    //usleep(500000); // to synchronize with the target since, when the main is executed, it is launched half a second later
+
     std::cout << "Starting Obstacle publisher" << std::endl;
     ObstaclePub* mypub = new ObstaclePub();
 

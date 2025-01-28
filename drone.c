@@ -71,7 +71,7 @@ void check_hit(Drone *drone, Object *object, int dim) {
         */ 
         float distance = sqrt(pow(drone->pos_x - (object[i].pos_x + 0.5), 2) + pow(drone->pos_y - (object[i].pos_y + 0.5), 2));
         if (distance <= HIT_THR && !object[i].hit) {
-            *score += object[i].type == 't' ? 1 : -1;
+            *score += object[i].type == 't' ? 1 : 0;
             object[i].hit = true;
         }
     }
