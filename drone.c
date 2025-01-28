@@ -21,9 +21,24 @@ Drone *drone;
 float *score;
 int n_obs, n_targ;
 Object *obstacles, *targets;
+float csi = 5;                                      // ????
 
 float calculate_friction_force(float velocity) {
     return -FRICTION_COEFFICIENT * velocity;
+}
+
+float calculate_attractive_forcex(int x, int xt){
+    if (abs(x-xt) < rho1)
+        return -csi * (x-xt);
+    else
+        return 0;
+}    
+
+float calculate_attractive_forcey(int y, int yt){
+    if (abs(y-yt) < rho1)
+        return -csi * (y-yt);
+    else
+        return 0;
 }
 
 float calculate_repulsive_forcex(Drone drone, int xo, int yo) {
@@ -62,7 +77,10 @@ float calculate_repulsive_forcey(Drone drone, int xo, int yo) {
     return fy;
 }
 
-void check_hit(Drone *drone, Object *object, int dim) {
+void check_hit(Drone *drone, Object *object, int dim, float *forces) {
+    forces[0] = 0.0f; // fx
+    forces[1] = 0.0f; // fy
+
     for (int i = 0; i < dim; i++) {
         /**
          * We add 0.5 to the position of each symbol because this way we 
@@ -70,22 +88,41 @@ void check_hit(Drone *drone, Object *object, int dim) {
          * rather than from the top-left corner
         */ 
         float distance = sqrt(pow(drone->pos_x - (object[i].pos_x + 0.5), 2) + pow(drone->pos_y - (object[i].pos_y + 0.5), 2));
-        if (distance <= HIT_THR && !object[i].hit) {
-            *score += object[i].type == 't' ? 1 : 0;
-            object[i].hit = true;
+        if (distance <= HIT_THR && (!object[i].hit || object[i].type == 'o')) {
+            /**
+             * It is possible to add 0.5 to the position to start exactly from the center of the symbol, 
+             * but we chose to leave it as is to make it more realistic
+             */
+            if (object[i].type == 'o') {
+                forces[0] += calculate_repulsive_forcex(*drone, object[i].pos_x, object[i].pos_y);
+                forces[1] += calculate_repulsive_forcey(*drone, object[i].pos_x, object[i].pos_y);
+            } else {
+                *score +=  1;
+                object[i].hit = true;
+                forces[0] += calculate_attractive_forcex(drone->pos_x, object[i].pos_x);
+                forces[1] += calculate_attractive_forcey(drone->pos_y, object[i].pos_y);  
+            }
         }
     }
 }
 
 void update_drone_position(Drone *drone, float dt) {
-    float fx_obs = 0;
-    float fy_obs = 0;
+    float fx_obs = 0.0f, fy_obs = 0.0f;
+    float fx_tgs = 0.0f, fy_tgs = 0.0f;
+    float forces[2];
 
     float frictionForceX = calculate_friction_force(drone->vel_x);
     float frictionForceY = calculate_friction_force(drone->vel_y);
 
-    float accelerationX = (drone->force_x + frictionForceX + fx_obs) / MASS;
-    float accelerationY = (drone->force_y + frictionForceY + fy_obs) / MASS;
+    check_hit(drone, obstacles, n_obs, forces);
+    fx_obs = forces[0];
+    fy_obs = forces[1];
+    check_hit(drone, targets, n_targ, forces);
+    fx_tgs = forces[0];
+    fy_tgs = forces[1];
+
+    float accelerationX = (drone->force_x + frictionForceX + fx_obs + fx_tgs) / MASS;
+    float accelerationY = (drone->force_y + frictionForceY + fy_obs + fy_tgs) / MASS;
 
     drone->vel_x += accelerationX * dt;
     drone->vel_y += accelerationY * dt;
@@ -101,28 +138,25 @@ void update_drone_position(Drone *drone, float dt) {
 void *update_drone_position_thread() {
     while (1) {
         update_drone_position(drone, T);
-        check_hit(drone, obstacles, n_obs);
-        check_hit(drone, targets, n_targ);
         usleep(50000);
     }
 }
-
 void handle_key_pressed(char key, Drone *drone) {
     switch (key) {
         case 'w': case 'W':
-            drone->force_x -= 0.1;
-            drone->force_y -= 0.1;
+            drone->force_x -= FORCE_MODULE;
+            drone->force_y -= FORCE_MODULE / 2;
             break;
         case 'e': case 'E':
             drone->force_x -= 0;
-            drone->force_y -= 0.1;
+            drone->force_y -= FORCE_MODULE / 2;
             break;
         case 'r': case 'R':
-            drone->force_x += 0.1;
-            drone->force_y -= 0.1;
+            drone->force_x += FORCE_MODULE;
+            drone->force_y -= FORCE_MODULE / 2;
             break;
         case 's': case 'S':
-            drone->force_x -= 0.1;
+            drone->force_x -= FORCE_MODULE;
             drone->force_y += 0;
             break;
         case 'd': case 'D':
@@ -130,20 +164,20 @@ void handle_key_pressed(char key, Drone *drone) {
             drone->force_y = 0;
             break;
         case 'f': case 'F':
-            drone->force_x += 0.1;
+            drone->force_x += FORCE_MODULE;
             drone->force_y += 0;
             break;
         case 'x': case 'X':
-            drone->force_x -= 0.1;
-            drone->force_y += 0.1;
+            drone->force_x -= FORCE_MODULE;
+            drone->force_y += FORCE_MODULE / 2;
             break;
         case 'c': case 'C':
             drone->force_x += 0;
-            drone->force_y += 0.1;
+            drone->force_y += FORCE_MODULE / 2;
             break;
         case 'v': case 'V':
-            drone->force_x += 0.1;
-            drone->force_y += 0.1;
+            drone->force_x += FORCE_MODULE;
+            drone->force_y += FORCE_MODULE / 2;
             break;
         default:
             break;
