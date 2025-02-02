@@ -26,7 +26,7 @@ The simulation environment consists of multiple processes that handle various as
 
 The system is organized into a modular architecture where each component is encapsulated in its own source file. The overall flow is as follows:
 
-![Architecture Sketch](images/Assignment1.1.png)
+![Architecture Sketch](images/assignment1.png)
 
 - **main.c**: entry point of the application. It uses `fork()` to create new processes, which then use `execvp()` to launch all the necessary processes for the program to function.
 - **server.c**: the blackboard, in addition to launching the process for map management, collects information from all active files via pipes and communicates it to the respective components, thus managing the data exchange. Not only pipes are used, but also shared memory to update the drone's position and the score. Additionally, through signals, every 15 seconds it sends signals to the components to generate new targets and obstacles, requesting them to create new ones.
