@@ -238,6 +238,14 @@ int main() {
     snprintf(drone_write_targets_fd_str, sizeof(drone_write_targets_fd_str), "%d", server_targets_fds[1]);
     snprintf(server_read_targets_fd_str, sizeof(server_read_targets_fd_str), "%d", server_targets_fds[0]);
 
+    sem_unlink("/exec_semaphore");
+    sem_t *exec_sem = sem_open("/exec_semaphore", O_CREAT | O_EXCL, 0666, 1);
+    if (exec_sem == SEM_FAILED) {
+        LOG_TO_FILE(errors, "Failed to open the semaphore for the exec");
+        perror("sem_open");
+        exit(EXIT_FAILURE);
+    }
+
     /* LAUNCH THE SERVER AND THE DRONE */
     pid_t pids[N_PROCS], wd;
     char *inputs[N_PROCS - 1][16] = {
@@ -247,6 +255,7 @@ int main() {
         {"./target", target_write_position_fd_str, target_read_map_fd_str, n_target, n_target, NULL}
     };
     for (int i = 0; i < N_PROCS - 1; i++) {
+        sem_wait(exec_sem);
         pids[i] = fork();
         if (pids[i] < 0) {
             perror("Error forking");
@@ -267,6 +276,8 @@ int main() {
         usleep(500000);
     }
 
+    sem_wait(exec_sem);
+
     /* LAUNCH THE INPUT */
     pid_t konsole = fork();
     char *keyboard_input[] = {"konsole", "-e", "./keyboard_manager", input_write_fd_str, NULL};
@@ -286,7 +297,7 @@ int main() {
         fclose(errors);
         exit(EXIT_FAILURE);
     } else {
-        usleep(500000);    
+        sem_wait(exec_sem); 
         pids[N_PROCS - 1] = get_konsole_child(konsole);
     }
     
@@ -319,12 +330,15 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    for(int i = 0; i < N_PROCS; i++) {
+    sem_wait(exec_sem);
+    for(int i = 0; i < N_PROCS + 1; i++) {
         wait(NULL);
     }
-    wait(NULL);
 
     /* END PROGRAM */
+
+    sem_close(exec_sem);
+    sem_unlink("/exec_semaphore");
 
     // Close the files
     fclose(debug);

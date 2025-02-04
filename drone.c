@@ -358,6 +358,14 @@ int main(int argc, char* argv[]) {
     
     LOG_TO_FILE(debug, "Process started");
 
+    sem_t *exec_sem = sem_open("/exec_semaphore", 0);
+    if (exec_sem == SEM_FAILED) {
+        LOG_TO_FILE(errors, "Failed to open the semaphore for the exec");
+        perror("sem_open");
+        exit(EXIT_FAILURE);
+    }
+    sem_post(exec_sem);
+
     /* SETUP THE PIPES */
     int map_read_size_fd = atoi(argv[1]);
     int input_read_key_fd = atoi(argv[2]);

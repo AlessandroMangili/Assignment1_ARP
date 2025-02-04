@@ -194,6 +194,14 @@ int main(int argc, char* argv[]) {
 
     LOG_TO_FILE(debug, "Process started");
 
+    sem_t *exec_sem = sem_open("/exec_semaphore", 0);
+    if (exec_sem == SEM_FAILED) {
+        LOG_TO_FILE(errors, "Failed to open the semaphore for the exec");
+        perror("sem_open");
+        exit(EXIT_FAILURE);
+    }
+    sem_post(exec_sem);
+
     /* SAVED THE CHILD PIDS */
     for (int i = 0; i < N_PROCS; i++) {
         pids[i] = atoi(argv[i+1]);
