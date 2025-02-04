@@ -159,6 +159,7 @@ public:
     //!Run the Publisher
     void run()
     {
+        /* Open the semaphore to synchronize the two publishers */
         sem_t *sync_sem = sem_open("/sync_semaphore", 0);
         if (sync_sem == SEM_FAILED) {
             LOG_TO_FILE(errors, "Failed to open the semaphore");
@@ -166,7 +167,7 @@ public:
             exit(EXIT_FAILURE);
         }
 
-        sem_post(sync_sem);
+        sem_post(sync_sem); // Release the resource to start the publishing of both publishers
         sem_close(sync_sem);
 
         while (true)
@@ -239,13 +240,14 @@ int main(int argc, char* argv[])
 
     LOG_TO_FILE(debug, "Process started");
 
+    /* Opens the semaphore for child process synchronization */
     sem_t *exec_sem = sem_open("/exec_semaphore", 0);
     if (exec_sem == SEM_FAILED) {
         LOG_TO_FILE(errors, "Failed to open the semaphore for the exec");
         perror("sem_open");
         exit(EXIT_FAILURE);
     }
-    sem_post(exec_sem);
+    sem_post(exec_sem); // Releases the resource to proceed with the launch of other child processes
 
     mypub->n_tgs = atoi(argv[1]);
     mypub->map_x = atoi(argv[2]);

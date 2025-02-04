@@ -229,6 +229,7 @@ int main() {
     snprintf(drone_write_targets_fd_str, sizeof(drone_write_targets_fd_str), "%d", server_targets_fds[1]);
     snprintf(server_read_targets_fd_str, sizeof(server_read_targets_fd_str), "%d", server_targets_fds[0]);
 
+    /* Initialize a semaphore to synchronize the two publishers so that they start publishing at the same time */
     sem_unlink("/sync_semaphore");
     sem_t *sync_sem = sem_open("/sync_semaphore", O_CREAT | O_EXCL, 0666, 0);
     if (sync_sem == SEM_FAILED) {
@@ -237,6 +238,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
+    /* Initialize a semaphore to wait for the start of each child process before proceeding with the launch of the next one */
     sem_unlink("/exec_semaphore");
     sem_t *exec_sem = sem_open("/exec_semaphore", O_CREAT | O_EXCL, 0666, 1);
     if (exec_sem == SEM_FAILED) {
@@ -245,7 +247,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    /* LAUNCH THE SERVER AND THE DRONE */
+    /* LAUNCH THE SERVER, THE DRONE, THE OBSTACLE AND THE TARGET */
     pid_t pids[N_PROCS], wd;
     char *inputs[N_PROCS - 1][16] = {
         {"./src/Binary/ServerSub", drone_write_size_fd_str, drone_write_key_fd_str, input_read_key_fd_str, drone_write_obstacles_fd_str, drone_write_targets_fd_str, pos_str, vel_str, force_str, n_obs, n_target, NULL}, 
@@ -255,7 +257,7 @@ int main() {
     };
 
     for (int i = 0; i < N_PROCS - 1; i++) {
-        sem_wait(exec_sem);
+        sem_wait(exec_sem); // Wait until the child process has started
         pids[i] = fork();
         if (pids[i] < 0) {
             perror("Error forking");
@@ -276,7 +278,7 @@ int main() {
         usleep(500000);
     }
 
-    sem_wait(exec_sem);
+    sem_wait(exec_sem); // Wait until the child process has started
 
     /* LAUNCH THE INPUT */
     pid_t konsole = fork();
@@ -297,7 +299,7 @@ int main() {
         fclose(errors);
         exit(EXIT_FAILURE);
     } else {
-        sem_wait(exec_sem);  
+        sem_wait(exec_sem);  // Wait until the child process has started
         pids[N_PROCS - 1] = get_konsole_child(konsole);
     }
     
@@ -330,7 +332,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    sem_wait(exec_sem);
+    sem_wait(exec_sem); // Wait until the child process has started
 
     for(int i = 0; i < N_PROCS + 1; i++) {
         wait(NULL);
