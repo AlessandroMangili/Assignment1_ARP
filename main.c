@@ -232,7 +232,15 @@ int main() {
     sem_unlink("/sync_semaphore");
     sem_t *sync_sem = sem_open("/sync_semaphore", O_CREAT | O_EXCL, 0666, 0);
     if (sync_sem == SEM_FAILED) {
-        LOG_TO_FILE(errors, "Failed to open the semaphore");
+        LOG_TO_FILE(errors, "Failed to open the semaphore for the sync");
+        perror("sem_open");
+        exit(EXIT_FAILURE);
+    }
+
+    sem_unlink("/exec_semaphore");
+    sem_t *exec_sem = sem_open("/exec_semaphore", O_CREAT | O_EXCL, 0666, 1);
+    if (exec_sem == SEM_FAILED) {
+        LOG_TO_FILE(errors, "Failed to open the semaphore for the exec");
         perror("sem_open");
         exit(EXIT_FAILURE);
     }
@@ -245,7 +253,9 @@ int main() {
         {"./src/Binary/ObstaclePub", n_obs, map_x, map_y, NULL},
         {"./src/Binary/TargetPub", n_target, map_x, map_y, NULL}
     };
+
     for (int i = 0; i < N_PROCS - 1; i++) {
+        sem_wait(exec_sem);
         pids[i] = fork();
         if (pids[i] < 0) {
             perror("Error forking");
@@ -263,8 +273,10 @@ int main() {
             fclose(errors);
             exit(EXIT_FAILURE);
         }
-        usleep(500000);
+        //usleep(500000);
     }
+
+    sem_wait(exec_sem);
 
     /* LAUNCH THE INPUT */
     pid_t konsole = fork();
@@ -285,11 +297,12 @@ int main() {
         fclose(errors);
         exit(EXIT_FAILURE);
     } else {
-        usleep(500000);    
+        sem_wait(exec_sem);  
         pids[N_PROCS - 1] = get_konsole_child(konsole);
     }
     
-    usleep(500000);
+    //usleep(500000);
+    sem_wait(exec_sem);
 
     /* LAUNCH THE WATCHDOG */
     char pids_string[N_PROCS][50];
@@ -318,16 +331,19 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
+    sem_wait(exec_sem);
 
-    for(int i = 0; i < N_PROCS; i++) {
+    for(int i = 0; i < N_PROCS + 1; i++) {
         wait(NULL);
     }
-    wait(NULL);
 
     /* END PROGRAM */
 
     sem_close(sync_sem);
     sem_unlink("/sync_semaphore");
+
+    sem_close(exec_sem);
+    sem_unlink("/exec_semaphore");
 
     // Close the files
     fclose(debug);

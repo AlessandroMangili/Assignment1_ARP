@@ -94,7 +94,7 @@ private:
             {
                 if (info.valid_data)
                 {
-                    std::cout << "Received data from " << currentTopic << ":" << std::endl;
+                    std::cout << "Received data from " << currentTopic /*<< ":" */ << std::endl;
 
                     // Use the correct data based on the topic
                     std::vector<Object> objects(currentMessage->x().size());
@@ -106,10 +106,10 @@ private:
                         if (i + 1 < currentMessage->x().size()) 
                             objectStr += "|";
 
-                        std::cout << "Index: " << i + 1
+                        /*std::cout << "Index: " << i + 1
                                 << " X: " << currentMessage->x().at(i)
                                 << " Y: " << currentMessage->y().at(i)
-                                << " SENT" << std::endl;
+                                << " SENT" << std::endl;*/
                     }
 
                     if (topicName == "ObstaclesTopic") {
@@ -407,6 +407,14 @@ int main(int argc, char* argv[])
     }
 
     LOG_TO_FILE(debug, "Process started");
+
+    sem_t *exec_sem = sem_open("/exec_semaphore", 0);
+    if (exec_sem == SEM_FAILED) {
+        LOG_TO_FILE(errors, "Failed to open the semaphore for the exec");
+        perror("sem_open");
+        exit(EXIT_FAILURE);
+    }
+    sem_post(exec_sem);
 
     /* CREATE AND SETUP THE PIPES */
     int drone_write_size_fd = atoi(argv[1]), 

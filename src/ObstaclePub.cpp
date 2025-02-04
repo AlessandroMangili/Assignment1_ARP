@@ -105,11 +105,9 @@ public:
     bool init()
     {
         DomainParticipantQos participantQos;
-        //participantQos.wire_protocol().builtin.discovery_config.discoveryProtocol = DiscoveryProtocol::SIMPLE;
-        //participantQos.wire_protocol().builtin.discovery_config.initial_announcements.count = 5;
 
         participantQos.name("Participant_publisher");
-        participant_ = DomainParticipantFactory::get_instance()->create_participant(1, participantQos);
+        participant_ = DomainParticipantFactory::get_instance()->create_participant(2, participantQos);
 
         if (participant_ == nullptr)
         {
@@ -165,7 +163,7 @@ public:
         if (sync_sem == SEM_FAILED) {
             LOG_TO_FILE(errors, "Failed to open the semaphore");
             perror("sem_open");
-            return;
+            exit(EXIT_FAILURE);
         }
 
         sem_wait(sync_sem);
@@ -238,11 +236,19 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
+    LOG_TO_FILE(debug, "Process started");
+
+    sem_t *exec_sem = sem_open("/exec_semaphore", 0);
+    if (exec_sem == SEM_FAILED) {
+        LOG_TO_FILE(errors, "Failed to open the semaphore for the exec");
+        perror("sem_open");
+        exit(EXIT_FAILURE);
+    }
+    sem_post(exec_sem);
+
     mypub->n_obs = atoi(argv[1]);
     mypub->map_x = atoi(argv[2]);
     mypub->map_y = atoi(argv[3]);
-
-    LOG_TO_FILE(debug, "Process started");
 
     /* SETTING THE SIGNALS */
     struct sigaction sa;
