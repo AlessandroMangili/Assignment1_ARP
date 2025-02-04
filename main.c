@@ -238,6 +238,7 @@ int main() {
     snprintf(drone_write_targets_fd_str, sizeof(drone_write_targets_fd_str), "%d", server_targets_fds[1]);
     snprintf(server_read_targets_fd_str, sizeof(server_read_targets_fd_str), "%d", server_targets_fds[0]);
 
+    /* Initialize a semaphore to wait for the start of each child process before proceeding with the launch of the next one */
     sem_unlink("/exec_semaphore");
     sem_t *exec_sem = sem_open("/exec_semaphore", O_CREAT | O_EXCL, 0666, 1);
     if (exec_sem == SEM_FAILED) {
@@ -255,7 +256,7 @@ int main() {
         {"./target", target_write_position_fd_str, target_read_map_fd_str, n_target, n_target, NULL}
     };
     for (int i = 0; i < N_PROCS - 1; i++) {
-        sem_wait(exec_sem);
+        sem_wait(exec_sem); // Wait until the child process has started
         pids[i] = fork();
         if (pids[i] < 0) {
             perror("Error forking");
@@ -276,7 +277,7 @@ int main() {
         usleep(500000);
     }
 
-    sem_wait(exec_sem);
+    sem_wait(exec_sem); // Wait until the child process has started
 
     /* LAUNCH THE INPUT */
     pid_t konsole = fork();
@@ -297,7 +298,7 @@ int main() {
         fclose(errors);
         exit(EXIT_FAILURE);
     } else {
-        sem_wait(exec_sem); 
+        sem_wait(exec_sem); // Wait until the child process has started
         pids[N_PROCS - 1] = get_konsole_child(konsole);
     }
     
@@ -330,13 +331,13 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    sem_wait(exec_sem);
+    sem_wait(exec_sem); // Wait until the child process has started
+    
     for(int i = 0; i < N_PROCS + 1; i++) {
         wait(NULL);
     }
 
     /* END PROGRAM */
-
     sem_close(exec_sem);
     sem_unlink("/exec_semaphore");
 
