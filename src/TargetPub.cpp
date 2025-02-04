@@ -53,13 +53,13 @@ private:
             {
                 matched_ = info.total_count;
                 matched = true;
-                std::cout << "Publisher matched." << std::endl;
+                std::cout << "Publisher Target matched." << std::endl;
             }
             else if (info.current_count_change == -1)
             {
                 matched_ = info.total_count;
                 matched = false;
-                std::cout << "Publisher unmatched." << std::endl;
+                std::cout << "Publisher Target unmatched." << std::endl;
             }
             else
             {
@@ -194,6 +194,8 @@ public:
     }
 };
 
+TargetPub* mypub;
+
 void signal_handler(int sig, siginfo_t* info, void *context) {
     if (sig == SIGUSR1) {
         wd_pid = info->si_pid;
@@ -203,6 +205,7 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
 
     if (sig == SIGUSR2) {
         LOG_TO_FILE(debug, "Shutting down by the WATCHDOG");
+        delete mypub;
         // Close the files
         fclose(errors);
         fclose(debug);
@@ -213,7 +216,7 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
 int main(int argc, char* argv[])
 {
     std::cout << "Starting Target publisher." << std::endl;
-    TargetPub* mypub = new TargetPub();
+    mypub = new TargetPub();
 
     debug = fopen("debug.log", "a");
     if (debug == NULL) {
@@ -233,7 +236,6 @@ int main(int argc, char* argv[])
         fclose(errors); 
         exit(EXIT_FAILURE);
     }
-
 
     LOG_TO_FILE(debug, "Process started");
 

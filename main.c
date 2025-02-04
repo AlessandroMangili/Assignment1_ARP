@@ -273,7 +273,7 @@ int main() {
             fclose(errors);
             exit(EXIT_FAILURE);
         }
-        //usleep(500000);
+        usleep(500000);
     }
 
     sem_wait(exec_sem);
@@ -301,8 +301,7 @@ int main() {
         pids[N_PROCS - 1] = get_konsole_child(konsole);
     }
     
-    //usleep(500000);
-    sem_wait(exec_sem);
+    usleep(500000);
 
     /* LAUNCH THE WATCHDOG */
     char pids_string[N_PROCS][50];
@@ -338,7 +337,6 @@ int main() {
     }
 
     /* END PROGRAM */
-
     sem_close(sync_sem);
     sem_unlink("/sync_semaphore");
 

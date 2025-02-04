@@ -53,13 +53,13 @@ private:
             {
                 matched_ = info.total_count;
                 matched = true;
-                std::cout << "Publisher matched." << std::endl;
+                std::cout << "Publisher Obstacle matched." << std::endl;
             }
             else if (info.current_count_change == -1)
             {
                 matched_ = info.total_count;
                 matched = false;
-                std::cout << "Publisher unmatched." << std::endl;
+                std::cout << "Publisher Obstacle unmatched." << std::endl;
             }
             else
             {
@@ -194,6 +194,8 @@ public:
     }
 };
 
+ObstaclePub* mypub;
+
 void signal_handler(int sig, siginfo_t* info, void *context) {
     if (sig == SIGUSR1) {
         wd_pid = info->si_pid;
@@ -203,6 +205,7 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
 
     if (sig == SIGUSR2) {
         LOG_TO_FILE(debug, "Shutting down by the WATCHDOG");
+        delete mypub;
         // Close the files
         fclose(errors);
         fclose(debug);
@@ -212,8 +215,6 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
 
 int main(int argc, char* argv[])
 {
-    //usleep(500000); // to synchronize with the target since, when the main is executed, it is launched half a second later
-
     std::cout << "Starting Obstacle publisher" << std::endl;
     ObstaclePub* mypub = new ObstaclePub();
 
