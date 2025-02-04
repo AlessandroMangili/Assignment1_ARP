@@ -53,6 +53,10 @@ The system is organized into a modular architecture where each component is enca
    ```bash
    sudo apt install libcjson-dev
    ```
+- **libbsd library**: Ensure that libbsd is installed on your system.
+   ```bash
+   sudo apt install libbsd-dev
+   ```
 
 ### Building the Application
 
