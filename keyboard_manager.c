@@ -148,8 +148,8 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
 int open_drone_shared_memory() {
     int drone_mem_fd = shm_open(DRONE_SHARED_MEMORY, O_RDONLY, 0666);
     if (drone_mem_fd == -1) {
-        perror("Error opening the shared memory");
-        LOG_TO_FILE(errors, "Error opening the shared memory");
+        perror("[INPUT]: Error opening the drone shared memory");
+        LOG_TO_FILE(errors, "Error opening the drone shared memory");
         // Close the files
         fclose(debug);
         fclose(errors);   
@@ -157,8 +157,8 @@ int open_drone_shared_memory() {
     }
     drone = (Drone *)mmap(0, sizeof(Drone), PROT_READ, MAP_SHARED, drone_mem_fd, 0);
     if (drone == MAP_FAILED) {
-        perror("Error mapping the shared memory");
-        LOG_TO_FILE(errors, "Error mapping the shared memory");
+        perror("[INPUT]: Error mapping the drone shared memory");
+        LOG_TO_FILE(errors, "Error mapping the drone shared memory");
         // Close the files
         fclose(debug);
         fclose(errors);   
@@ -181,12 +181,12 @@ int main(int argc, char* argv[]) {
     /* OPEN THE LOG FILES */
     debug = fopen("debug.log", "a");
     if (debug == NULL) {
-        perror("Error opening the debug file");
+        perror("[INPUT]: Error opening the debug file");
         exit(EXIT_FAILURE);
     }
     errors = fopen("errors.log", "a");
     if (errors == NULL) {
-        perror("Error opening the errors file");
+        perror("[INPUT]: Error opening the errors file");
         exit(EXIT_FAILURE);
     }
 
@@ -203,8 +203,8 @@ int main(int argc, char* argv[]) {
     /* Opens the semaphore for child process synchronization */
     sem_t *exec_sem = sem_open("/exec_semaphore", 0);
     if (exec_sem == SEM_FAILED) {
+        perror("[INPUT]: Failed to open the semaphore for the exec");
         LOG_TO_FILE(errors, "Failed to open the semaphore for the exec");
-        perror("sem_open");
         exit(EXIT_FAILURE);
     }
     sem_post(exec_sem); // Releases the resource to proceed with the launch of other child processes
@@ -237,7 +237,7 @@ int main(int argc, char* argv[]) {
 
     // Set the signal handler for SIGWINCH
     if (sigaction(SIGWINCH, &sa, NULL) == -1) {
-        perror("Error in sigaction(SIGWINCH)");
+        perror("[INPUT]: Error in sigaction(SIGWINCH)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGWINCH)");
         // Close the files
         fclose(debug);
@@ -246,7 +246,7 @@ int main(int argc, char* argv[]) {
     }
     // Set the signal handler for SIGUSR1
     if (sigaction(SIGUSR1, &sa, NULL) == -1) {
-        perror("Error in sigaction(SIGURS1)");
+        perror("[INPUT]: Error in sigaction(SIGURS1)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS1)");
         // Close the files
         fclose(debug);
@@ -255,20 +255,28 @@ int main(int argc, char* argv[]) {
     }
     // Set the signal handler for SIGUSR2
     if(sigaction(SIGUSR2, &sa, NULL) == -1){
-        perror("rror in sigaction(SIGURS2)");
+        perror("[INPUT]: rror in sigaction(SIGURS2)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS2)");
         // Close the files
         fclose(debug);
         fclose(errors);   
         exit(EXIT_FAILURE);
     }
+
+    // Add sigmask to block all signals execpt SIGWINCH, SIGURS1 and SIGURS2
+    sigset_t sigset;
+    sigfillset(&sigset);
+    sigdelset(&sigset, SIGWINCH);
+    sigdelset(&sigset, SIGUSR1);
+    sigdelset(&sigset, SIGUSR2);
+    sigprocmask(SIG_SETMASK, &sigset, NULL);
     
     /* START THREAD */
     // Initialize and create the thread to continuously update the information window
     pthread_mutex_init(&info_window_mutex, NULL);
     pthread_t info_thread;
     if (pthread_create(&info_thread, NULL, update_info_thread, NULL) != 0) {
-        perror("Error creating the thread for update the info window");
+        perror("[INPUT]: Error creating the thread for update the info window");
         LOG_TO_FILE(errors, "Error creating the thread for update the info window");
         // Close the files
         fclose(debug);
@@ -301,8 +309,8 @@ int main(int argc, char* argv[]) {
 
     // Close the file descriptor
     if (close(drone_mem_fd) == -1) {
-        perror("Close file descriptor");
-        LOG_TO_FILE(errors, "Error in closing the shared memory");
+        perror("[INPUT]: Error closing the file descriptor of shared memory");
+        LOG_TO_FILE(errors, "Error closing the file descriptor of shared memory");
         // Close the files
         fclose(debug);
         fclose(errors); 
@@ -310,6 +318,8 @@ int main(int argc, char* argv[]) {
     }
     // Unmap the shared memory region
     munmap(drone, sizeof(Drone));
+
+    sem_close(exec_sem);
 
     // Close the files
     fclose(debug);

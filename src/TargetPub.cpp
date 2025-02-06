@@ -163,7 +163,7 @@ public:
         sem_t *sync_sem = sem_open("/sync_semaphore", 0);
         if (sync_sem == SEM_FAILED) {
             LOG_TO_FILE(errors, "Failed to open the semaphore");
-            perror("sem_open");
+            perror("[TARGET]: sem_open");
             exit(EXIT_FAILURE);
         }
 
@@ -206,6 +206,7 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
 
     if (sig == SIGUSR2) {
         LOG_TO_FILE(debug, "Shutting down by the WATCHDOG");
+        printf("Target shutting down by the WATCHDOG: %d\n", getpid());
         delete mypub;
         // Close the files
         fclose(errors);
@@ -221,12 +222,12 @@ int main(int argc, char* argv[])
 
     debug = fopen("debug.log", "a");
     if (debug == NULL) {
-        perror("fopen");
+        perror("[TARGET]: Error opening the debug file");
         exit(EXIT_FAILURE);
     }
     errors = fopen("errors.log", "a");
     if (errors == NULL) {
-        perror("fopen");
+        perror("[TARGET]: Error opening the error file");
         exit(EXIT_FAILURE);
     }
 
@@ -243,11 +244,20 @@ int main(int argc, char* argv[])
     /* Opens the semaphore for child process synchronization */
     sem_t *exec_sem = sem_open("/exec_semaphore", 0);
     if (exec_sem == SEM_FAILED) {
+        perror("[TARGET]: Failed to open the semaphore for the exec");
         LOG_TO_FILE(errors, "Failed to open the semaphore for the exec");
-        perror("sem_open");
         exit(EXIT_FAILURE);
     }
     sem_post(exec_sem); // Releases the resource to proceed with the launch of other child processes
+
+    /* Opens the semaphore for server process synchronization */
+    sem_t *target_sem = sem_open("/target_semaphore", 0);
+    if (target_sem == SEM_FAILED) {
+        perror("[TARGET]: Failed to open the semaphore for the target");
+        LOG_TO_FILE(errors, "Failed to open the semaphore for the target");
+        exit(EXIT_FAILURE);
+    }
+    sem_post(target_sem); // Releases the resource to proceed with the launch of the server's command to get this pid   
 
     mypub->n_tgs = atoi(argv[1]);
     mypub->map_x = atoi(argv[2]);
@@ -261,7 +271,7 @@ int main(int argc, char* argv[])
 
     // Set the signal handler for SIGUSR1
     if (sigaction(SIGUSR1, &sa, NULL) == -1) {
-        perror("Error in sigaction(SIGURS1)");
+        perror("[TARGET]: Error in sigaction(SIGURS1)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS1)");
         // Close the files
         fclose(debug);
@@ -270,7 +280,7 @@ int main(int argc, char* argv[])
     }
     // Set the signal handler for SIGUSR2
     if(sigaction(SIGUSR2, &sa, NULL) == -1){
-        perror("Error in sigaction(SIGURS2)");
+        perror("[TARGET]: Error in sigaction(SIGURS2)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS2)");
         // Close the files
         fclose(debug);
@@ -278,10 +288,23 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
+    // Add sigmask to block all signals execpt SIGURS1, SIGURS2 and SIGTERM
+    sigset_t sigset;
+    sigfillset(&sigset);
+    sigdelset(&sigset, SIGUSR1);
+    sigdelset(&sigset, SIGUSR2);
+    sigdelset(&sigset, SIGTERM);
+    sigprocmask(SIG_SETMASK, &sigset, NULL);
+
+
     if (mypub->init())
     {
         mypub->run();
     }
+
+    /* END PROGRAM */
+    sem_close(exec_sem);
+    sem_close(target_sem);
 
     delete mypub;
     // Close the files

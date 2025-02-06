@@ -84,10 +84,10 @@ void resize_handler(int sig, siginfo_t *info, void *context) {
     
     if (sig == SIGUSR2){
         LOG_TO_FILE(debug, "Shutting down by the SERVER");
+        endwin();
         // Close the files
         fclose(errors);
         fclose(debug);
-        endwin();
         exit(EXIT_SUCCESS);
     }
 }
@@ -95,7 +95,7 @@ void resize_handler(int sig, siginfo_t *info, void *context) {
 int open_drone_shared_memory() {
     int drone_mem_fd = shm_open(DRONE_SHARED_MEMORY, O_RDONLY, 0666);
     if (drone_mem_fd == -1) {
-        perror("Error opening the drone shared memory");
+        perror("[MAP]: Error opening the drone shared memory");
         LOG_TO_FILE(errors, "Error opening the drone shared memory");
         // Close the files
         fclose(debug);
@@ -104,7 +104,7 @@ int open_drone_shared_memory() {
     }
     drone = (Drone *)mmap(0, sizeof(Drone), PROT_READ, MAP_SHARED, drone_mem_fd, 0);
     if (drone == MAP_FAILED) {
-        perror("Error mapping the drone shared memory");
+        perror("[MAP]: Error mapping the drone shared memory");
         LOG_TO_FILE(errors, "Error mapping the drone shared memory");
         // Close the files
         fclose(debug);
@@ -118,7 +118,7 @@ int open_drone_shared_memory() {
 int open_score_shared_memory() {
     int score_mem_fd = shm_open(SCORE_SHARED_MEMORY, O_RDONLY, 0666);
     if (score_mem_fd == -1) {
-        perror("Error opening the score shared memory");
+        perror("[MAP]: Error opening the score shared memory");
         LOG_TO_FILE(errors, "Error opening the score shared memory");
         // Close the files
         fclose(debug);
@@ -127,7 +127,7 @@ int open_score_shared_memory() {
     }
     score = (float *)mmap(0, sizeof(float), PROT_READ, MAP_SHARED, score_mem_fd, 0);
     if (score == MAP_FAILED) {
-        perror("Error mapping the score shared memory");
+        perror("[MAP]: Error mapping the score shared memory");
         LOG_TO_FILE(errors, "Error mapping the score shared memory");
         // Close the files
         fclose(debug);
@@ -150,12 +150,12 @@ int main(int argc, char *argv[]) {
     /* OPEN THE LOG FILES */
     debug = fopen("debug.log", "a");
     if (debug == NULL) {
-        perror("Error opening the debug file");
+        perror("[MAP]: Error opening the debug file");
         exit(EXIT_FAILURE);
     }
     errors = fopen("errors.log", "a");
     if (errors == NULL) {
-        perror("Error opening the errors file");
+        perror("[MAP]: Error opening the errors file");
         exit(EXIT_FAILURE);
     }
 
@@ -168,6 +168,15 @@ int main(int argc, char *argv[]) {
     }
 
     LOG_TO_FILE(debug, "Process started");
+
+    /* Opens the semaphore for server process synchronization */
+    sem_t *map_sem = sem_open("/map_semaphore", 0);
+    if (map_sem == SEM_FAILED) {
+        perror("[MAP]: Failed to open the semaphore for the exec"); 
+        LOG_TO_FILE(errors, "Failed to open the semaphore for the exec");
+        exit(EXIT_FAILURE);
+    }
+    sem_post(map_sem);  
 
     /* SETUP THE PIPE */
     server_write_size_fd = atoi(argv[1]);
@@ -194,7 +203,7 @@ int main(int argc, char *argv[]) {
     sigemptyset(&sa.sa_mask);
     // Set the signal handler for SIGWINCH
     if (sigaction(SIGWINCH, &sa, NULL) == -1) {
-        perror("Error in sigaction(SIGWINCH)");
+        perror("[MAP]: Error in sigaction(SIGWINCH)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGWINCH)");
         // Close the files
         fclose(debug);
@@ -203,13 +212,20 @@ int main(int argc, char *argv[]) {
     }
     // Set the signal handler for SIGUSR2
     if(sigaction(SIGUSR2, &sa, NULL) == -1){
-        perror("Error in sigaction(SIGURS2)");
+        perror("[MAP]: Error in sigaction(SIGURS2)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS2)");
         // Close the files
         fclose(debug);
         fclose(errors);   
         exit(EXIT_FAILURE);
     }
+
+    // Add sigmask to block all signals execpt SIGWINCH and SIGURS2
+    sigset_t sigset;
+    sigfillset(&sigset);
+    sigdelset(&sigset, SIGWINCH);
+    sigdelset(&sigset, SIGUSR2);
+    sigprocmask(SIG_SETMASK, &sigset, NULL);
 
     /* OPEN THE SHARED MEMORY */
     int drone_mem_fd = open_drone_shared_memory();
@@ -248,7 +264,7 @@ int main(int argc, char *argv[]) {
         } while(activity == -1 && errno == EINTR);
 
         if (activity < 0) {
-            perror("Error in the server's select");
+            perror("[MAP]: Error in the server's select");
             LOG_TO_FILE(errors, "Error in select which pipe reads");
             break;
         } else if (activity > 0) {
@@ -290,8 +306,8 @@ int main(int argc, char *argv[]) {
     endwin();
     // Close the file descriptor
     if (close(drone_mem_fd) == -1 || close(score_mem_fd) == -1) {
-        perror("Close file descriptor");
-        LOG_TO_FILE(errors, "Error closing the file descriptor of the memory");
+        perror("[MAP]: Error closing the file descriptor of shared memory");
+        LOG_TO_FILE(errors, "Error closing the file descriptor of shared memory");
         // Close the files
         fclose(debug);
         fclose(errors); 
@@ -300,6 +316,8 @@ int main(int argc, char *argv[]) {
     // Unmap the shared memory region
     munmap(drone, sizeof(Drone));
     munmap(score, sizeof(float));
+
+    sem_close(map_sem);
 
     // Close the files
     fclose(debug);

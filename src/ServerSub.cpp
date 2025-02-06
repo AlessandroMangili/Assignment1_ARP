@@ -241,7 +241,7 @@ public:
             } while(activity == -1 && errno == EINTR);
 
             if (activity < 0) {
-                perror("Error in the server's select");
+                perror("[SERVER]: Error in the server's select");
                 LOG_TO_FILE(errors, "Error in select which pipe reads");
                 break;
             } else if (activity > 0) {
@@ -273,6 +273,26 @@ public:
 
 };
 
+
+// Gets the pid of the process running on the Konsole terminal
+int get_konsole_child(pid_t konsole) {
+    char cmd[100];
+    sprintf(cmd, "ps --ppid %d -o pid= 2>/dev/null", konsole);
+    FILE *pipe = popen(cmd, "r");
+    if (pipe == NULL) {
+        perror("[SERVER]: Error opening the pipe to write the PID of the executed process on the terminal (Konsole)");
+        LOG_TO_FILE(errors, "Error opening the pipe to write the PID of the executed process on the terminal (Konsole)");
+        // Close the files
+        fclose(debug);
+        fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+    int pid;
+    fscanf(pipe, "%d", &pid);
+    pclose(pipe);
+    return pid;
+}
+
 void signal_handler(int sig, siginfo_t* info, void *context) {
     if (sig == SIGUSR1) {
         wd_pid = info->si_pid;
@@ -281,26 +301,37 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
     }
     if (sig == SIGUSR2) {
         LOG_TO_FILE(debug, "Shutting down by the WATCHDOG");
+        
+        printf("Server shutting down by the WATCHDOG: %d\n", getpid());
+        if (kill(map_pid, SIGUSR2) == -1) {
+            perror("[SERVER]: Error sending SIGTERM signal to the MAP");
+            LOG_TO_FILE(errors, "Error sending SIGTERM signal to the MAP");
+            exit(EXIT_FAILURE);
+        }
 
         // Unlink the shared memory
         if (shm_unlink(DRONE_SHARED_MEMORY) == -1) {
-            perror("Unlink shared memory");
-            LOG_TO_FILE(errors, "Error unlinking the shared memory");
+            perror("[SERVER]: Error unlinking the drone shared memory");
+            LOG_TO_FILE(errors, "Error unlinking the drone shared memory");
             // Close the files
             fclose(debug);
             fclose(errors); 
             exit(EXIT_FAILURE);
         }
 
+        // Unlink the shared memory
+        if (shm_unlink(SCORE_SHARED_MEMORY) == -1) {
+            perror("[SERVER]: Error unlinking the score shared memory");
+            LOG_TO_FILE(errors, "Error unlinking the score shared memory");
+            // Close the files
+            fclose(debug);
+            fclose(errors); 
+        }
+
         // Close the semaphore and unlink it
         sem_close(drone->sem);
         sem_unlink("drone_sem");
 
-        if (kill(map_pid, SIGUSR2) == -1) {
-            perror("Error sending SIGTERM signal to the MAP");
-            LOG_TO_FILE(errors, "Error sending SIGTERM signal to the MAP");
-            exit(EXIT_FAILURE);
-        }
         // Close the files
         fclose(errors);
         fclose(debug);
@@ -312,8 +343,8 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
 int create_drone_shared_memory() {
     int drone_mem_fd = shm_open(DRONE_SHARED_MEMORY, O_CREAT | O_RDWR, 0666);
     if (drone_mem_fd == -1) {
-        perror("Error opening the shared memory");
-        LOG_TO_FILE(errors, "Error opening the shared memory");
+        perror("[SERVER]: Error opening the drone shared memory");
+        LOG_TO_FILE(errors, "Error opening the drone shared memory");
         // Close the files
         fclose(debug);
         fclose(errors);   
@@ -322,8 +353,8 @@ int create_drone_shared_memory() {
     
     // Set the size of the shared memory
     if(ftruncate(drone_mem_fd, sizeof(Drone)) == -1){
-        perror("Error setting the size of the shared memory");
-        LOG_TO_FILE(errors, "Error setting the size of the shared memory");
+        perror("[SERVER]: Error setting the size of the drone shared memory");
+        LOG_TO_FILE(errors, "Error setting the size of the drone shared memory");
         // Close the files
         fclose(debug);
         fclose(errors);   
@@ -333,8 +364,8 @@ int create_drone_shared_memory() {
     // Map the shared memory into a drone objects
     drone = (Drone *)mmap(0, sizeof(Drone), PROT_READ | PROT_WRITE, MAP_SHARED, drone_mem_fd, 0);
     if (drone == MAP_FAILED) {
-        perror("Error mapping the shared memory");
-        LOG_TO_FILE(errors, "Error mapping the shared memory");
+        perror("[SERVER]: Error mapping the drone shared memory");
+        LOG_TO_FILE(errors, "Error mapping the drone shared memory");
         // Close the files
         fclose(debug);
         fclose(errors);   
@@ -347,8 +378,8 @@ int create_drone_shared_memory() {
 int create_score_shared_memory() {
     int score_mem_fd = shm_open(SCORE_SHARED_MEMORY, O_CREAT | O_RDWR, 0666);
     if (score_mem_fd == -1) {
-        perror("Error opening the shared memory");
-        LOG_TO_FILE(errors, "Error opening the shared memory");
+        perror("[SERVER]: Error opening the score shared memory");
+        LOG_TO_FILE(errors, "Error opening the score shared memory");
         // Close the files
         fclose(debug);
         fclose(errors);   
@@ -357,8 +388,8 @@ int create_score_shared_memory() {
     
     // Set the size of the shared memory
     if(ftruncate(score_mem_fd, sizeof(float)) == -1){
-        perror("Error setting the size of the shared memory");
-        LOG_TO_FILE(errors, "Error setting the size of the shared memory");
+        perror("[SERVER]: Error setting the size of the score shared memory");
+        LOG_TO_FILE(errors, "Error setting the size of the score shared memory");
         // Close the files
         fclose(debug);
         fclose(errors);   
@@ -368,8 +399,8 @@ int create_score_shared_memory() {
     // Map the shared memory into a drone objects
     score = (float *)mmap(0, sizeof(float), PROT_READ | PROT_WRITE, MAP_SHARED, score_mem_fd, 0);
     if (score == MAP_FAILED) {
-        perror("Error mapping the shared memory");
-        LOG_TO_FILE(errors, "Error mapping the shared memory");
+        perror("[SERVER]: Error mapping the score shared memory");
+        LOG_TO_FILE(errors, "Error mapping the score shared memory");
         // Close the files
         fclose(debug);
         fclose(errors);   
@@ -388,12 +419,12 @@ int main(int argc, char* argv[])
     /* OPEN THE LOG FILES */
     debug = fopen("debug.log", "a");
     if (debug == NULL) {
-        perror("Error opening the debug file");
+        perror("[SERVER]: Error opening the debug file");
         exit(EXIT_FAILURE);
     }
     errors = fopen("errors.log", "a");
     if (errors == NULL) {
-        perror("Error opening the errors file");
+        perror("[SERVER]: Error opening the errors file");
         exit(EXIT_FAILURE);
     }
 
@@ -411,7 +442,7 @@ int main(int argc, char* argv[])
     sem_t *exec_sem = sem_open("/exec_semaphore", 0);
     if (exec_sem == SEM_FAILED) {
         LOG_TO_FILE(errors, "Failed to open the semaphore for the exec");
-        perror("sem_open");
+        perror("[SERVER]: Failed to open the semaphore for the exec");
         exit(EXIT_FAILURE);
     }
     sem_post(exec_sem);  // Releases the resource to proceed with the launch of other child processes
@@ -426,7 +457,7 @@ int main(int argc, char* argv[])
 
     int pipe_fd[2], pipe2_fd[2], pipe3_fd[2];
     if (pipe(pipe_fd) == -1) {
-        perror("Error creating the pipe for the map");
+        perror("[SERVER]: Error creating the pipe for the map");
         LOG_TO_FILE(errors, "Error creating the pipe");
         // Close the files
         fclose(debug);
@@ -434,7 +465,7 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
     if (pipe(pipe2_fd) == -1) {
-        perror("Error creating the pipe 2 for the map");
+        perror("[SERVER]: Error creating the pipe 2 for the map");
         LOG_TO_FILE(errors, "Error creating the pipe 2");
         // Close the files
         fclose(debug);
@@ -442,7 +473,7 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
     if (pipe(pipe3_fd) == -1) {
-        perror("Error creating the pipe 3 for the map");
+        perror("[SERVER]: Error creating the pipe 3 for the map");
         LOG_TO_FILE(errors, "Error creating the pipe 3");
         // Close the files
         fclose(debug);
@@ -461,15 +492,23 @@ int main(int argc, char* argv[])
     int drone_mem_fd = create_drone_shared_memory();
     int score_mem_fd = create_score_shared_memory();
 
-    /* CREATE THE SEMAPHORE */
+    /* CREATE THE SEMAPHORES */
     sem_unlink("drone_sem");
     drone->sem = sem_open("drone_sem", O_CREAT | O_RDWR, 0666, 1);
     if (drone->sem == SEM_FAILED) {
-        perror("Error creating the semaphore for the drone");
+        perror("[SERVER]: Error creating the semaphore for the drone");
         LOG_TO_FILE(errors, "Error creating the semaphore for the drone");
         // Close the files
         fclose(debug);
         fclose(errors);
+        exit(EXIT_FAILURE);
+    }
+    // Initialize a semaphore to wait for the start of map
+    sem_unlink("/map_semaphore");
+    sem_t *map_sem = sem_open("/map_semaphore", O_CREAT | O_EXCL, 0666, 0);
+    if (map_sem == SEM_FAILED) {
+        perror("[SERVER]: Failed to open the semaphore for the map");
+        LOG_TO_FILE(errors, "Failed to open the semaphore for the map");
         exit(EXIT_FAILURE);
     }
 
@@ -497,22 +536,25 @@ int main(int argc, char* argv[])
     /* LAUNCH THE MAP WINDOW */
     // Fork to create the map window process
     char *map_window_path[] = {"konsole", "-e", "./map_window", map_write_size_fd_str, map_read_obstacle_fd_str, map_read_target_fd_str, n_obs_str, n_targ_str, NULL};
-    map_pid = fork();
-    if (map_pid ==-1){
-        perror("Error forking the map file");
+    pid_t konsole_map_pid = fork();
+    if (konsole_map_pid < 0){
+        perror("[SERVER]: Error forking the map file");
         LOG_TO_FILE(errors, "Error forking the map file");
         // Close the files
         fclose(debug);
         fclose(errors);
         exit(EXIT_FAILURE);
-    } else if (map_pid == 0){
+    } else if (konsole_map_pid == 0){
         execvp(map_window_path[0], map_window_path);
-        perror("Failed to execute to launch the map file");
+        perror("[SERVER]: Failed to execute to launch the map file");
         LOG_TO_FILE(errors, "Failed to execute to launch the map file");
         // Close the files
         fclose(debug);
         fclose(errors);
         exit(EXIT_FAILURE);
+    } else {
+        sem_wait(map_sem);
+        map_pid = get_konsole_child(konsole_map_pid);
     }
     
     /* SETTING THE SIGNALS */
@@ -522,7 +564,7 @@ int main(int argc, char* argv[])
     sigemptyset(&sa.sa_mask);
     // Set the signal handler for SIGUSR1
     if (sigaction(SIGUSR1, &sa, NULL) == -1) {
-        perror("Error in sigaction(SIGURS1)");
+        perror("[SERVER]: Error in sigaction(SIGURS1)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS1)");
         // Close the files
         fclose(debug);
@@ -531,7 +573,7 @@ int main(int argc, char* argv[])
     }
     // Set the signal handler for SIGUSR2
     if(sigaction(SIGUSR2, &sa, NULL) == -1){
-        perror("Error in sigaction(SIGURS2)");
+        perror("[SERVER]: Error in sigaction(SIGURS2)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS2)");
         // Close the files
         fclose(debug);
@@ -539,7 +581,14 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
-    usleep(50000);
+    // Add sigmask to block all signals execpt SIGURS1 and SIGURS2
+    sigset_t sigset;
+    sigfillset(&sigset);
+    sigdelset(&sigset, SIGUSR1);
+    sigdelset(&sigset, SIGUSR2);
+    sigprocmask(SIG_SETMASK, &sigset, NULL);
+
+    //usleep(50000);
 
     
     if (mysub->init())
@@ -547,11 +596,11 @@ int main(int argc, char* argv[])
         mysub->run(drone_write_size_fd, drone_write_key_fd, input_read_key_fd, map_read_size_fd);
     }
 
-        /* END PROGRAM */
+    /* END PROGRAM */
     // Unlink the shared memory
     if (shm_unlink(DRONE_SHARED_MEMORY) == -1 || shm_unlink(SCORE_SHARED_MEMORY) == -1) {
-        perror("Unlink shared memory");
-        LOG_TO_FILE(errors, "Error unlinking the shared memory");
+        perror("[SERVER]: Error unlinking the drone or score shared memory");
+        LOG_TO_FILE(errors, "Error unlinking the drone or score shared memory");
         // Close the files
         fclose(debug);
         fclose(errors); 
@@ -559,8 +608,8 @@ int main(int argc, char* argv[])
     }
     // Close the file descriptor
     if (close(drone_mem_fd) == -1 || close(score_mem_fd) == -1) {
-        perror("Close file descriptor");
-        LOG_TO_FILE(errors, "Error closing the file descriptor of the memory");
+        perror("[SERVER]: Error closing the file descriptor of shared memory");
+        LOG_TO_FILE(errors, "Error closing the file descriptor of shared memory");
         // Close the files
         fclose(debug);
         fclose(errors); 
@@ -570,9 +619,15 @@ int main(int argc, char* argv[])
     munmap(drone, sizeof(Drone));
     munmap(score, sizeof(float));
 
-    // Close the semaphore and unlink it
+    // Close the semaphores and unlink it
     sem_close(drone->sem);
     sem_unlink("drone_sem");
+
+    sem_close(exec_sem);
+    sem_unlink("/exec_semaphore");
+    
+    sem_close(map_sem);
+    sem_unlink("/map_semaphore");
 
     // Close the files
     fclose(debug);
