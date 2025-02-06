@@ -42,8 +42,8 @@ void update_info_window() {
     mvwprintw(info_window, middle_row + 6, middle_col - 7, "}");
 
     mvwprintw(info_window, middle_row + 8, middle_col - 7, "force {");
-    mvwprintw(info_window, middle_row + 9, middle_col - 6, "x: %.6f", drone->force_x * 10);
-    mvwprintw(info_window, middle_row + 10, middle_col - 6, "y: %.6f", drone->force_y * 10);
+    mvwprintw(info_window, middle_row + 9, middle_col - 6, "x: %.6f", drone->force_x);
+    mvwprintw(info_window, middle_row + 10, middle_col - 6, "y: %.6f", drone->force_y);
     mvwprintw(info_window, middle_row + 11, middle_col - 7, "}");
     wrefresh(info_window);
 }
