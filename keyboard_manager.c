@@ -208,6 +208,7 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
     sem_post(exec_sem); // Releases the resource to proceed with the launch of other child processes
+    sem_close(exec_sem);
 
     /* SETUP THE PIPE */
     int server_write_key_fd = atoi(argv[1]);
@@ -318,8 +319,6 @@ int main(int argc, char* argv[]) {
     }
     // Unmap the shared memory region
     munmap(drone, sizeof(Drone));
-
-    sem_close(exec_sem);
 
     // Close the files
     fclose(debug);

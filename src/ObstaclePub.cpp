@@ -20,6 +20,7 @@ using namespace eprosima::fastdds::dds;
 FILE *debug, *errors;
 pid_t wd_pid;
 bool matched = false;
+sem_t *sync_sem;
 
 class ObstaclePub
 {
@@ -52,8 +53,10 @@ private:
             if (info.current_count_change == 1)
             {
                 matched_ = info.total_count;
-                matched = true;
                 std::cout << "Publisher Obstacle matched." << std::endl;
+                sem_wait(sync_sem); // Wait until the other publisher is also ready to publish
+                std::this_thread::sleep_for(std::chrono::seconds(3));
+                matched = true;
             }
             else if (info.current_count_change == -1)
             {
@@ -159,17 +162,6 @@ public:
     //!Run the Publisher
     void run()
     {
-        /* Open the semaphore to synchronize the two publishers */
-        sem_t *sync_sem = sem_open("/sync_semaphore", 0);
-        if (sync_sem == SEM_FAILED) {
-            LOG_TO_FILE(errors, "Failed to open the semaphore");
-            perror("[OBSTACLE]: sem_open");
-            exit(EXIT_FAILURE);
-        }
-
-        sem_wait(sync_sem); // Wait until the other publisher is also ready to publish
-        sem_close(sync_sem);
-
         while (true)
         {
             if (matched) {
@@ -249,6 +241,14 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
     sem_post(exec_sem);  // Releases the resource to proceed with the launch of other child processes
+    sem_close(exec_sem);
+    /* Open the semaphore to synchronize the two publishers */
+    sync_sem = sem_open("/sync_semaphore", 0);
+    if (sync_sem == SEM_FAILED) {
+        perror("[OBSTACLE]: Failed to open the sync semaphore");
+        LOG_TO_FILE(errors, "Failed to open the semaphore");
+        exit(EXIT_FAILURE);
+    }
 
     mypub->n_obs = atoi(argv[1]);
     mypub->map_x = atoi(argv[2]);
@@ -293,7 +293,7 @@ int main(int argc, char* argv[])
     }
 
     /* END PROGRAM */
-    sem_close(exec_sem);
+    sem_close(sync_sem);
 
     delete mypub;
     // Close the files

@@ -197,7 +197,7 @@ int main(int argc, char* argv[]) {
 
     LOG_TO_FILE(debug, "Process started");
 
-     /* Opens the semaphore for child process synchronization */
+    /* Opens the semaphore for child process synchronization */
     sem_t *exec_sem = sem_open("/exec_semaphore", 0);
     if (exec_sem == SEM_FAILED) {
         perror("[WATCHDOG]: Failed to open the semaphore for the exec");
@@ -205,6 +205,7 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
     sem_post(exec_sem); // Releases the resource to proceed with the launch of other child processes
+    sem_close(exec_sem);
 
     /* SAVED THE CHILD PIDS */
     for (int i = 0; i < N_PROCS; i++) {
@@ -255,13 +256,10 @@ int main(int argc, char* argv[]) {
     sigdelset(&sigset, SIGTERM);
     sigprocmask(SIG_SETMASK, &sigset, NULL);
 
-
     /* LAUNCH THE WATCHDOG */
     watchdog(TIMEOUT);
 
     /* END THE PROGRAM */
-
-    sem_close(exec_sem);
     // Close the files
     fclose(debug);
     fclose(errors);

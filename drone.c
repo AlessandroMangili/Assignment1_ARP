@@ -370,6 +370,7 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
     sem_post(exec_sem); // Releases the resource to proceed with the launch of other child processes
+    sem_close(exec_sem);
 
     /* SETUP THE PIPES */
     int map_read_size_fd = atoi(argv[1]);
@@ -482,8 +483,6 @@ int main(int argc, char* argv[]) {
     munmap(drone, sizeof(Drone));
     munmap(score, sizeof(float));
 
-    // Close the semaphore
-    sem_close(exec_sem);
     // Cancel the thread
     pthread_cancel(drone_thread);
 

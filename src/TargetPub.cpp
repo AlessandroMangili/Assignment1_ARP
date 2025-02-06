@@ -19,6 +19,7 @@ using namespace eprosima::fastdds::dds;
 
 FILE *debug, *errors;
 pid_t wd_pid;
+sem_t *sync_sem;
 bool matched = false;
 
 class TargetPub
@@ -52,8 +53,10 @@ private:
             if (info.current_count_change == 1)
             {
                 matched_ = info.total_count;
+                std::cout << "Publisher Target matched." << std::endl;            
+                sem_post(sync_sem); // Release the resource to start the publishing of both publishers
+                std::this_thread::sleep_for(std::chrono::seconds(3));
                 matched = true;
-                std::cout << "Publisher Target matched." << std::endl;
             }
             else if (info.current_count_change == -1)
             {
@@ -159,17 +162,6 @@ public:
     //!Run the Publisher
     void run()
     {
-        /* Open the semaphore to synchronize the two publishers */
-        sem_t *sync_sem = sem_open("/sync_semaphore", 0);
-        if (sync_sem == SEM_FAILED) {
-            LOG_TO_FILE(errors, "Failed to open the semaphore");
-            perror("[TARGET]: sem_open");
-            exit(EXIT_FAILURE);
-        }
-
-        sem_post(sync_sem); // Release the resource to start the publishing of both publishers
-        sem_close(sync_sem);
-
         while (true)
         {
             if (matched) {
@@ -249,15 +241,15 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
     sem_post(exec_sem); // Releases the resource to proceed with the launch of other child processes
+    sem_close(exec_sem);
 
-    /* Opens the semaphore for server process synchronization */
-    sem_t *target_sem = sem_open("/target_semaphore", 0);
-    if (target_sem == SEM_FAILED) {
-        perror("[TARGET]: Failed to open the semaphore for the target");
-        LOG_TO_FILE(errors, "Failed to open the semaphore for the target");
+    /* Open the semaphore to synchronize the two publishers */
+    sync_sem = sem_open("/sync_semaphore", 0);
+    if (sync_sem == SEM_FAILED) {
+        perror("[TARGET]: Failed to open the sync semaphore");
+        LOG_TO_FILE(errors, "Failed to open the semaphore");
         exit(EXIT_FAILURE);
     }
-    sem_post(target_sem); // Releases the resource to proceed with the launch of the server's command to get this pid   
 
     mypub->n_tgs = atoi(argv[1]);
     mypub->map_x = atoi(argv[2]);
@@ -303,8 +295,7 @@ int main(int argc, char* argv[])
     }
 
     /* END PROGRAM */
-    sem_close(exec_sem);
-    sem_close(target_sem);
+    sem_close(sync_sem);
 
     delete mypub;
     // Close the files

@@ -172,11 +172,12 @@ int main(int argc, char *argv[]) {
     /* Opens the semaphore for server process synchronization */
     sem_t *map_sem = sem_open("/map_semaphore", 0);
     if (map_sem == SEM_FAILED) {
-        perror("[MAP]: Failed to open the semaphore for the exec"); 
-        LOG_TO_FILE(errors, "Failed to open the semaphore for the exec");
+        perror("[MAP]: Failed to open the semaphore for the map"); 
+        LOG_TO_FILE(errors, "Failed to open the semaphore for the map");
         exit(EXIT_FAILURE);
     }
-    sem_post(map_sem);  
+    sem_post(map_sem);
+    sem_close(map_sem);
 
     /* SETUP THE PIPE */
     server_write_size_fd = atoi(argv[1]);
@@ -316,8 +317,6 @@ int main(int argc, char *argv[]) {
     // Unmap the shared memory region
     munmap(drone, sizeof(Drone));
     munmap(score, sizeof(float));
-
-    sem_close(map_sem);
 
     // Close the files
     fclose(debug);
