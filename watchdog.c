@@ -21,7 +21,7 @@ void get_current_time(char *buffer, int len) {
 void kill_processes() {
     for (int i = 0; i < N_PROCS; i++) {
         if (kill(pids[i], SIGUSR2) == -1) {
-            perror("Error sending signal SIGUSR2 kill from the watchdog");
+            perror("[WATCHDOG]: Error sending signal SIGUSR2 kill from the watchdog to a process, check the error log file to see what it is");
             switch (i) {
                 case 0:
                     LOG_TO_FILE(errors, "Error sending signal SIGUSR2 kill to the SERVER");
@@ -72,6 +72,7 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
 
     if (sig == SIGUSR2) {
         LOG_TO_FILE(debug, "The keyboard manager has sent the termination signal, shutting down the drone and the server");
+        printf("Watchdog shutting down by the terminate character: %d\n", getpid());
         kill_processes();
         // Close the files
         fclose(debug);
@@ -79,7 +80,7 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
         exit(EXIT_SUCCESS);
     }
     if (sig == SIGTERM) {
-        LOG_TO_FILE(debug, "WD");
+        LOG_TO_FILE(debug, "ENDED");
     }
 }
 
@@ -92,7 +93,7 @@ void watchdog(int timeout) {
         for (int i = 0; i < N_PROCS; i++) {
             status[i] = false;
             if (kill(pids[i], SIGUSR1) == -1) {
-                perror("Error sending signal SIGUSR1 kill from the watchdog");
+                perror("[WATCHDOG]: Error sending signal SIGUSR1 kill from the watchdog to a process, check the error log file to see what it is");
                 kill_processes();
                 switch (i) {
                     case 0:
@@ -111,6 +112,7 @@ void watchdog(int timeout) {
                         LOG_TO_FILE(errors, "Error sending signal SIGUSR1 kill to the INPUT");
                         break;
                 }
+                printf("Watchdog shutting down: %d\n", getpid());
                 // Close the files
                 fclose(debug);
                 fclose(errors);
@@ -160,6 +162,7 @@ void watchdog(int timeout) {
                         break;
                 }
                 kill_processes();
+                printf("Watchdog shutting down: %d\n", getpid());
                 // Close the files
                 fclose(debug);
                 fclose(errors);
@@ -173,13 +176,13 @@ int main(int argc, char* argv[]) {
     /* OPEN THE LOG FILES */
     debug = fopen("debug.log", "a");
     if (debug == NULL) {
-        perror("Error opening the debug file");
+        perror("[WATCHDOG]: Error opening the debug file");
         kill_processes();
         exit(EXIT_FAILURE);
     }
     errors = fopen("errors.log", "a");
     if (errors == NULL) {
-        perror("Error errors the debug file");
+        perror("[WATCHDOG]: Error errors the debug file");
         kill_processes();
         exit(EXIT_FAILURE);
     }
@@ -197,8 +200,8 @@ int main(int argc, char* argv[]) {
     /* Opens the semaphore for child process synchronization */
     sem_t *exec_sem = sem_open("/exec_semaphore", 0);
     if (exec_sem == SEM_FAILED) {
+        perror("[WATCHDOG]: Failed to open the semaphore for the exec");
         LOG_TO_FILE(errors, "Failed to open the semaphore for the exec");
-        perror("sem_open");
         exit(EXIT_FAILURE);
     }
     sem_post(exec_sem); // Releases the resource to proceed with the launch of other child processes
@@ -216,7 +219,7 @@ int main(int argc, char* argv[]) {
 
     // Set the signal handler for SIGUSR1
     if (sigaction(SIGUSR1, &sa, NULL) == -1) {
-        perror("Error in sigaction(SIGURS1)");
+        perror("[WATCHDOG]: Error in sigaction(SIGURS1)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS1)");
         kill_processes();
         // Close the files
@@ -226,7 +229,7 @@ int main(int argc, char* argv[]) {
     }
     // Set the signal handler for SIGUSR2
     if(sigaction(SIGUSR2, &sa, NULL) == -1){
-        perror("Error in sigaction(SIGURS2)");
+        perror("[WATCHDOG]: Error in sigaction(SIGURS2)");
         kill_processes();
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS2)");
         // Close the files
@@ -236,13 +239,21 @@ int main(int argc, char* argv[]) {
     }
     // Set the signal handler for SIGTERM
     if(sigaction(SIGTERM, &sa, NULL) == -1){
-        perror("Error in sigaction(SIGTERM)");
+        perror("[WATCHDOG]: Error in sigaction(SIGTERM)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGTERM)");
         // Close the files
         fclose(debug);
         fclose(errors);
         exit(EXIT_FAILURE);
     }
+
+    // Add sigmask to block all signals execpt SIGURS1, SIGURS2 and SIGTERM
+    sigset_t sigset;
+    sigfillset(&sigset);
+    sigdelset(&sigset, SIGUSR1);
+    sigdelset(&sigset, SIGUSR2);
+    sigdelset(&sigset, SIGTERM);
+    sigprocmask(SIG_SETMASK, &sigset, NULL);
 
     /* LAUNCH THE WATCHDOG */
     watchdog(TIMEOUT);

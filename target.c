@@ -46,6 +46,7 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
 
     if (sig == SIGUSR2) {
         LOG_TO_FILE(debug, "Shutting down by the WATCHDOG");
+        printf("Target shutting down by the WATCHDOG: %d\n", getpid());
         // Close the files
         fclose(errors);
         fclose(debug);
@@ -63,12 +64,12 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
 int main(int argc, char* argv[]) {
     debug = fopen("debug.log", "a");
     if (debug == NULL) {
-        perror("fopen");
+        perror("[TARGET]: Error opening the debug file");
         exit(EXIT_FAILURE);
     }
     errors = fopen("errors.log", "a");
     if (errors == NULL) {
-        perror("fopen");
+        perror("[TARGET]: Error opening the error file");
         exit(EXIT_FAILURE);
     }
     
@@ -85,11 +86,20 @@ int main(int argc, char* argv[]) {
     /* Opens the semaphore for child process synchronization */
     sem_t *exec_sem = sem_open("/exec_semaphore", 0);
     if (exec_sem == SEM_FAILED) {
+        perror("[TARGET]: Failed to open the semaphore for the exec");
         LOG_TO_FILE(errors, "Failed to open the semaphore for the exec");
-        perror("sem_open");
         exit(EXIT_FAILURE);
     }
     sem_post(exec_sem); // Releases the resource to proceed with the launch of other child processes
+
+    /* Opens the semaphore for server process synchronization */
+    sem_t *target_sem = sem_open("/target_semaphore", 0);
+    if (target_sem == SEM_FAILED) {
+        perror("[TARGET]: Failed to open the semaphore for the target");
+        LOG_TO_FILE(errors, "Failed to open the semaphore for the target");
+        exit(EXIT_FAILURE);
+    }
+    sem_post(target_sem); // Releases the resource to proceed with the launch of the server's command to get this pid   
 
     /* CREATE AND SETUP THE PIPES */
     target_write_position_fd = atoi(argv[1]);
@@ -106,7 +116,7 @@ int main(int argc, char* argv[]) {
 
     // Set the signal handler for SIGUSR1
     if (sigaction(SIGUSR1, &sa, NULL) == -1) {
-        perror("Error in sigaction(SIGURS1)");
+        perror("[TARGET]: Error in sigaction(SIGURS1)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS1)");
         // Close the files
         fclose(debug);
@@ -115,7 +125,7 @@ int main(int argc, char* argv[]) {
     }
     // Set the signal handler for SIGUSR2
     if(sigaction(SIGUSR2, &sa, NULL) == -1){
-        perror("Error in sigaction(SIGURS2)");
+        perror("[TARGET]: Error in sigaction(SIGURS2)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS2)");
         // Close the files
         fclose(debug);
@@ -124,13 +134,21 @@ int main(int argc, char* argv[]) {
     }
     // Set the signal handler for SIGUSR2
     if(sigaction(SIGTERM, &sa, NULL) == -1){
-        perror("Error in sigaction(SIGTERM)");
+        perror("[TARGET]: Error in sigaction(SIGTERM)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGTERM)");
         // Close the files
         fclose(debug);
         fclose(errors);
         exit(EXIT_FAILURE);
     }
+
+    // Add sigmask to block all signals execpt SIGURS1, SIGURS2 and SIGTERM
+    sigset_t sigset;
+    sigfillset(&sigset);
+    sigdelset(&sigset, SIGUSR1);
+    sigdelset(&sigset, SIGUSR2);
+    sigdelset(&sigset, SIGTERM);
+    sigprocmask(SIG_SETMASK, &sigset, NULL);
 
     char buffer[256];
     fd_set read_fds;
@@ -153,7 +171,7 @@ int main(int argc, char* argv[]) {
         } while(activity == -1 && errno == EINTR);
 
         if (activity < 0) {
-            perror("Error in the server's select");
+            perror("[TARGET]: Error in the server's select");
             LOG_TO_FILE(errors, "Error in select which pipe reads");
             break;
         } else if (activity > 0) {
@@ -167,8 +185,12 @@ int main(int argc, char* argv[]) {
                 }
             }
         }
-    }   
+    }
 
+    /* END PROGRAM */
+    sem_close(exec_sem);
+    sem_close(target_sem);
+    
     // Close the files
     fclose(debug);
     fclose(errors);

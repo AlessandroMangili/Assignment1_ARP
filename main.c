@@ -17,7 +17,8 @@ int get_konsole_child(pid_t konsole) {
 
     FILE *pipe = popen(cmd, "r");
     if (pipe == NULL) {
-        perror("popen");
+        perror("[MAIN]: Error opening the pipe to write the PID of the executed process on the terminal (Konsole)");
+        LOG_TO_FILE(errors, "Error opening the pipe to write the PID of the executed process on the terminal (Konsole)");
         // Close the files
         fclose(debug);
         fclose(errors);
@@ -35,12 +36,12 @@ int main() {
     /* OPEN THE LOG FILES */
     debug = fopen("debug.log", "a");
     if (debug == NULL) {
-        perror("Error opening the debug file");
+        perror("[MAIN]: Error opening the debug file");
         exit(EXIT_FAILURE);
     }
     errors = fopen("errors.log", "a");
     if (errors == NULL) {
-        perror("Error opening the errors file");
+        perror("[MAIN]: Error opening the errors file");
         exit(EXIT_FAILURE);
     }
 
@@ -99,15 +100,15 @@ int main() {
     char jsonBuffer[1024];
     FILE *file = fopen("appsettings.json", "r");
     if (file == NULL) {
-        perror("Error opening the file");
-        return EXIT_FAILURE;//1
+        perror("[MAIN]: Error opening the file");
+        return EXIT_FAILURE;
     }
     int len = fread(jsonBuffer, 1, sizeof(jsonBuffer), file); 
     fclose(file);
 
     cJSON *json = cJSON_Parse(jsonBuffer);
     if (json == NULL) {
-        perror("Error parsing the file");
+        perror("[MAIN]: Error parsing the file");
         return EXIT_FAILURE;
     }
 
@@ -137,7 +138,7 @@ int main() {
 
     int drone_map_fds[2], drone_key_fds[2], input_pipe_fds[2], obstacle_position_fds[2], target_position_fds[2], obstacle_map_fds[2], target_map_fds[2], server_obstacles_fds[2], server_targets_fds[2];
     if (pipe(drone_map_fds) == -1) {
-        perror("Error creating the pipe for the drone");
+        perror("[MAIN]: Error creating the pipe for the drone");
         LOG_TO_FILE(errors, "Error creating the pipe for the drone-map");
         // Close the files
         fclose(debug);
@@ -145,7 +146,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
     if (pipe(drone_key_fds) == -1) {
-        perror("Error creating the pipe for the drone");
+        perror("[MAIN]: Error creating the pipe for the drone");
         LOG_TO_FILE(errors, "Error creating the pipe for the drone-key");
         // Close the files
         fclose(debug);
@@ -153,7 +154,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
     if (pipe(input_pipe_fds) == -1) {
-        perror("Error creating the pipe for the input");
+        perror("[MAIN]: Error creating the pipe for the input");
         LOG_TO_FILE(errors, "Error creating the pipe for the input");
         // Close the files
         fclose(debug);
@@ -161,7 +162,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
     if (pipe(obstacle_position_fds) == -1) {
-        perror("Error creating the pipe for the obstacle");
+        perror("[MAIN]: Error creating the pipe for the obstacle");
         LOG_TO_FILE(errors, "Error creating the pipe for the obstacle");
         // Close the files
         fclose(debug);
@@ -169,7 +170,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
     if (pipe(obstacle_map_fds) == -1) {
-        perror("Error creating the pipe for the obstacle");
+        perror("[MAIN]: Error creating the pipe for the obstacle");
         LOG_TO_FILE(errors, "Error creating the pipe for the obstacle");
         // Close the files
         fclose(debug);
@@ -177,7 +178,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
     if (pipe(target_position_fds) == -1) {
-        perror("Error creating the pipe for the target");
+        perror("[MAIN]: Error creating the pipe for the target");
         LOG_TO_FILE(errors, "Error creating the pipe for the target");
         // Close the files
         fclose(debug);
@@ -185,7 +186,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
     if (pipe(target_map_fds) == -1) {
-        perror("Error creating the pipe for the target");
+        perror("[MAIN]: Error creating the pipe for the target");
         LOG_TO_FILE(errors, "Error creating the pipe for the target");
         // Close the files
         fclose(debug);
@@ -193,7 +194,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
     if (pipe(server_obstacles_fds) == -1) {
-        perror("Error creating the pipe for the target");
+        perror("[MAIN]: Error creating the pipe for the target");
         LOG_TO_FILE(errors, "Error creating the pipe for the target");
         // Close the files
         fclose(debug);
@@ -201,7 +202,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
     if (pipe(server_targets_fds) == -1) {
-        perror("Error creating the pipe for the target");
+        perror("[MAIN]: Error creating the pipe for the target");
         LOG_TO_FILE(errors, "Error creating the pipe for the target");
         // Close the files
         fclose(debug);
@@ -242,8 +243,8 @@ int main() {
     sem_unlink("/exec_semaphore");
     sem_t *exec_sem = sem_open("/exec_semaphore", O_CREAT | O_EXCL, 0666, 1);
     if (exec_sem == SEM_FAILED) {
+        perror("[MAIN]: Failed to open the semaphore for the exec");
         LOG_TO_FILE(errors, "Failed to open the semaphore for the exec");
-        perror("sem_open");
         exit(EXIT_FAILURE);
     }
 
@@ -259,7 +260,7 @@ int main() {
         sem_wait(exec_sem); // Wait until the child process has started
         pids[i] = fork();
         if (pids[i] < 0) {
-            perror("Error forking");
+            perror("[MAIN]: Error forking");
             LOG_TO_FILE(errors, "Error forking");
             // Close the files
             fclose(debug);
@@ -267,7 +268,7 @@ int main() {
             exit(EXIT_FAILURE);
         } else if (pids[i] == 0) {
             execvp(inputs[i][0], inputs[i]);
-            perror("Failed to execute to launch one of the main process");
+            perror("[MAIN]: Failed to execute to launch one of the main process");
             LOG_TO_FILE(errors, "Failed to execute to launch one of the main process");
             // Close the files
             fclose(debug);
@@ -283,7 +284,7 @@ int main() {
     pid_t konsole = fork();
     char *keyboard_input[] = {"konsole", "-e", "./keyboard_manager", input_write_fd_str, NULL};
     if (konsole < 0) {
-        perror("Error forking the keyboard manager");
+        perror("[MAIN]: Error forking the keyboard manager");
         LOG_TO_FILE(errors, "Error forking the keyboard manager");
         // Close the files
         fclose(debug);
@@ -291,7 +292,7 @@ int main() {
         exit(EXIT_FAILURE);
     } else if (konsole == 0) {
         execvp(keyboard_input[0], keyboard_input);
-        perror("Failed to execute to launch the keyboard manager");
+        perror("[MAIN]: Failed to execute to launch the keyboard manager");
         LOG_TO_FILE(errors, "Failed to execute to launch the keyboard manager");
         // Close the files
         fclose(debug);
@@ -315,7 +316,7 @@ int main() {
     wd_input[N_PROCS + 1] = NULL;
     wd = fork();
     if (wd < 0) {
-        perror("Error forking the watchdog");
+        perror("[MAIN]: Error forking the watchdog");
         LOG_TO_FILE(errors, "Error forking the watchdog");
         // Close the files
         fclose(debug);
@@ -323,7 +324,7 @@ int main() {
         exit(EXIT_FAILURE);
     } else if (wd == 0) {
         execvp(wd_input[0], wd_input);
-        perror("Failed to execute to launch the watchdog");
+        perror("[MAIN]: Failed to execute to launch the watchdog");
         LOG_TO_FILE(errors, "Failed to execute to launch the watchdog");
         // Close the files
         fclose(debug);

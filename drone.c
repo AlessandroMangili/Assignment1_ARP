@@ -21,7 +21,7 @@ Drone *drone;
 float *score;
 int n_obs, n_targ;
 Object *obstacles, *targets;
-float csi = 5;                                      // ????
+float csi = 5;
 
 float calculate_friction_force(float velocity) {
     return -FRICTION_COEFFICIENT * velocity;
@@ -193,6 +193,9 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
 
     if (sig == SIGUSR2) {
         LOG_TO_FILE(debug, "Shutting down by the WATCHDOG");
+        printf("Drone shutting down by the WATCHDOG: %d\n", getpid());
+        free(obstacles);
+        free(targets);
         // Close the files
         fclose(errors);
         fclose(debug);
@@ -203,7 +206,7 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
 int open_drone_shared_memory() {
     int drone_mem_fd = shm_open(DRONE_SHARED_MEMORY, O_RDWR, 0666);
     if (drone_mem_fd == -1) {
-        perror("Error opening the drone shared memory");
+        perror("[DRONE]: Error opening the drone shared memory");
         LOG_TO_FILE(errors, "Error opening the drone shared memory");
         // Close the files
         fclose(debug);
@@ -212,7 +215,7 @@ int open_drone_shared_memory() {
     }
     drone = (Drone *)mmap(0, sizeof(Drone), PROT_READ | PROT_WRITE, MAP_SHARED, drone_mem_fd, 0);
     if (drone == MAP_FAILED) {
-        perror("Error mapping the drone shared memory");
+        perror("[DRONE]: Error mapping the drone shared memory");
         LOG_TO_FILE(errors, "Error mapping the drone shared memory");
         // Close the files
         fclose(debug);
@@ -226,7 +229,7 @@ int open_drone_shared_memory() {
 int open_score_shared_memory() {
     int score_mem_fd = shm_open(SCORE_SHARED_MEMORY, O_RDWR, 0666);
     if (score_mem_fd == -1) {
-        perror("Error opening the score shared memory");
+        perror("[DRONE]: Error opening the score shared memory");
         LOG_TO_FILE(errors, "Error opening the score shared memory");
         // Close the files
         fclose(debug);
@@ -235,7 +238,7 @@ int open_score_shared_memory() {
     }
     score = (float *)mmap(0, sizeof(float), PROT_READ | PROT_WRITE, MAP_SHARED, score_mem_fd, 0);
     if (score == MAP_FAILED) {
-        perror("Error mapping the score shared memory");
+        perror("[DRONE]: Error mapping the score shared memory");
         LOG_TO_FILE(errors, "Error mapping the score shared memory");
         // Close the files
         fclose(debug);
@@ -279,7 +282,7 @@ void drone_process(int map_read_size_fd, int input_read_key_fd, int obstacles_re
         } while(activity == -1 && errno == EINTR);
 
         if (activity < 0) {
-            perror("Error in the drone's select");
+            perror("[DRONE]: Error in the drone's select");
             LOG_TO_FILE(errors, "Error in select which pipe reads");
             break;
         } else if (activity > 0) {
@@ -339,12 +342,12 @@ int main(int argc, char* argv[]) {
     /* OPEN THE LOG FILES */
     debug = fopen("debug.log", "a");
     if (debug == NULL) {
-        perror("Error opening the debug file");
+        perror("[DRONE]: Error opening the debug file");
         exit(EXIT_FAILURE);
     }
     errors = fopen("errors.log", "a");
     if (errors == NULL) {
-        perror("Error opening the errors file");
+        perror("[DRONE]: Error opening the errors file");
         exit(EXIT_FAILURE);
     }
 
@@ -361,8 +364,8 @@ int main(int argc, char* argv[]) {
     /* Opens the semaphore for child process synchronization */
     sem_t *exec_sem = sem_open("/exec_semaphore", 0);
     if (exec_sem == SEM_FAILED) {
+        perror("[DRONE]: Failed to open the semaphore for the exec");
         LOG_TO_FILE(errors, "Failed to open the semaphore for the exec");
-        perror("sem_open");
         exit(EXIT_FAILURE);
     }
     sem_post(exec_sem); // Releases the resource to proceed with the launch of other child processes
@@ -382,7 +385,7 @@ int main(int argc, char* argv[]) {
 
     // Set the signal handler for SIGUSR1
     if (sigaction(SIGUSR1, &sa, NULL) == -1) {
-        perror("Error in sigaction(SIGURS1)");
+        perror("[DRONE]: Error in sigaction(SIGURS1)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS1)");
         // Close the files
         fclose(debug);
@@ -391,7 +394,7 @@ int main(int argc, char* argv[]) {
     }
     // Set the signal handler for SIGUSR2
     if(sigaction(SIGUSR2, &sa, NULL) == -1){
-        perror("Error in sigaction(SIGURS2)");
+        perror("[DRONE]: Error in sigaction(SIGURS2)");
         LOG_TO_FILE(errors, "Error in sigaction(SIGURS2)");
         // Close the files
         fclose(debug);
@@ -399,9 +402,16 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    // Add sigmask to block all signals execpt SIGURS1 and SIGURS2
+    sigset_t sigset;
+    sigfillset(&sigset);
+    sigdelset(&sigset, SIGUSR1);
+    sigdelset(&sigset, SIGUSR2);
+    sigprocmask(SIG_SETMASK, &sigset, NULL);
+
     obstacles = (Object *)malloc(n_obs * sizeof(Object));
     if (obstacles == NULL) {
-        perror("Error allocating the memory for the obstacles");
+        perror("[DRONE]: Error allocating the memory for the obstacles");
         LOG_TO_FILE(errors, "Error allocating the memory for the obstacles");
         // Close the files
         fclose(debug);
@@ -410,7 +420,7 @@ int main(int argc, char* argv[]) {
     }
     targets = (Object *)malloc(n_targ * sizeof(Object));
     if (targets == NULL) {
-        perror("Error allocating the memory for the targets");
+        perror("[DRONE]: Error allocating the memory for the targets");
         free(obstacles);
         LOG_TO_FILE(errors, "Error allocating the memory for the targets");
         // Close the files
@@ -444,7 +454,7 @@ int main(int argc, char* argv[]) {
     // Start the thread to continuously update the drone's information
     pthread_t drone_thread;
     if (pthread_create(&drone_thread, NULL, update_drone_position_thread, NULL) != 0) {
-        perror("Error creating the thread for updating the drone's information");
+        perror("[DRONE]: Error creating the thread for updating the drone's information");
         LOG_TO_FILE(errors, "Error creating the thread for updating the drone's information");
         // Close the files
         fclose(debug);
@@ -455,16 +465,25 @@ int main(int argc, char* argv[]) {
     /* LAUNCH THE DRONE */
     drone_process(map_read_size_fd, input_read_key_fd, obstacles_read_position_fd, targets_read_position_fd);
 
+    pthread_join(drone_thread, NULL);
+
     /* END PROGRAM */
     // Close the file descriptor
     if (close(drone_mem_fd) == -1 || close(score_mem_fd) == -1) {
-        perror("Close file descriptor");
-        LOG_TO_FILE(errors, "Error closing the file descriptor of the memory");
+        perror("[DRONE]: Error closing the file descriptor of shared memory");
+        LOG_TO_FILE(errors, "Error closing the file descriptor of shared memory");
         // Close the files
         fclose(debug);
         fclose(errors); 
         exit(EXIT_FAILURE);
     }
+
+    // Close the semaphore
+    sem_close(exec_sem);
+
+    // Cancel the thread
+    pthread_cancel(drone_thread);
+
     // Unmap the shared memory region
     munmap(drone, sizeof(Drone));
     munmap(score, sizeof(float));
