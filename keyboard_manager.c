@@ -42,8 +42,8 @@ void update_info_window() {
     mvwprintw(info_window, middle_row + 6, middle_col - 7, "}");
 
     mvwprintw(info_window, middle_row + 8, middle_col - 7, "force {");
-    mvwprintw(info_window, middle_row + 9, middle_col - 6, "x: %.6f", drone->force_x * 10);
-    mvwprintw(info_window, middle_row + 10, middle_col - 6, "y: %.6f", drone->force_y * 10);
+    mvwprintw(info_window, middle_row + 9, middle_col - 6, "x: %.6f", drone->force_x);
+    mvwprintw(info_window, middle_row + 10, middle_col - 6, "y: %.6f", drone->force_y);
     mvwprintw(info_window, middle_row + 11, middle_col - 7, "}");
     wrefresh(info_window);
 }
@@ -208,6 +208,7 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
     sem_post(exec_sem); // Releases the resource to proceed with the launch of other child processes
+    sem_close(exec_sem);
 
     /* SETUP THE PIPE */
     int server_write_key_fd = atoi(argv[1]);
@@ -318,8 +319,6 @@ int main(int argc, char* argv[]) {
     }
     // Unmap the shared memory region
     munmap(drone, sizeof(Drone));
-
-    sem_close(exec_sem);
 
     // Close the files
     fclose(debug);

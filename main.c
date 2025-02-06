@@ -333,13 +333,13 @@ int main() {
     }
 
     sem_wait(exec_sem); // Wait until the child process has started
+    sem_close(exec_sem);
     
     for(int i = 0; i < N_PROCS + 1; i++) {
         wait(NULL);
     }
 
     /* END PROGRAM */
-    sem_close(exec_sem);
     sem_unlink("/exec_semaphore");
 
     // Close the files

@@ -184,9 +184,11 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
             exit(EXIT_FAILURE);
         }
 
-        // Close the semaphore and unlink it
-        sem_close(drone->sem);
+        // Unlink the semaphores
         sem_unlink("drone_sem");
+        sem_unlink("/exec_semaphore");
+        sem_unlink("/map_semaphore");        
+        sem_unlink("/target_semaphore");
        
         // Close the files
         fclose(errors);
@@ -358,7 +360,8 @@ int main(int argc, char *argv[]) {
         LOG_TO_FILE(errors, "Failed to open the semaphore for the exec");
         exit(EXIT_FAILURE);
     }
-    sem_post(exec_sem); // Releases the resource to proceed with the launch of other child processes    
+    sem_post(exec_sem); // Releases the resource to proceed with the launch of other child processes  
+    sem_close(exec_sem);  
 
     /* CREATE AND SETUP THE PIPES */
     int drone_write_size_fd = atoi(argv[1]), 
@@ -457,6 +460,7 @@ int main(int argc, char *argv[]) {
 
     // Unlock
     sem_post(drone->sem);
+    sem_close(drone->sem);
 
     /* LAUNCH THE MAP WINDOW */
     // Fork to create the map window process
@@ -480,6 +484,7 @@ int main(int argc, char *argv[]) {
     } else {
         sem_wait(map_sem);
         map_pid = get_konsole_child(konsole_map_pid);
+        sem_close(map_sem);
     }
     
     /* SETTING THE SIGNALS */
@@ -516,6 +521,8 @@ int main(int argc, char *argv[]) {
     sem_wait(target_sem);
     obs_pid = get_pid_by_command("./obstacle");
     targ_pid = get_pid_by_command("./target");
+    
+    sem_close(target_sem);
 
     usleep(50000);
 
@@ -567,17 +574,10 @@ int main(int argc, char *argv[]) {
     munmap(drone, sizeof(Drone));
     munmap(score, sizeof(float));
 
-    // Close the semaphores and unlink it
-    sem_close(drone->sem);
+    // Unlink the semaphores
     sem_unlink("drone_sem");
-
-    sem_close(exec_sem);
     sem_unlink("/exec_semaphore");
-
-    sem_close(map_sem);
     sem_unlink("/map_semaphore");
-
-    sem_close(target_sem);
     sem_unlink("/target_semaphore");
 
     // Close the files

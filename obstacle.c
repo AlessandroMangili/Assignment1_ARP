@@ -93,6 +93,7 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
     sem_post(exec_sem); // Releases the resource to proceed with the launch of other child processes
+    sem_close(exec_sem);
 
     /* CREATE AND SETUP THE PIPES */
     obstacle_write_position_fd = atoi(argv[1]);
@@ -181,8 +182,6 @@ int main(int argc, char* argv[]) {
     }
 
     /* END PROGRAM */
-    sem_close(exec_sem);
-
     // Close the files
     fclose(debug);
     fclose(errors);

@@ -91,7 +91,8 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
     sem_post(exec_sem); // Releases the resource to proceed with the launch of other child processes
-
+    sem_close(exec_sem);
+    
     /* Opens the semaphore for server process synchronization */
     sem_t *target_sem = sem_open("/target_semaphore", 0);
     if (target_sem == SEM_FAILED) {
@@ -99,7 +100,8 @@ int main(int argc, char* argv[]) {
         LOG_TO_FILE(errors, "Failed to open the semaphore for the target");
         exit(EXIT_FAILURE);
     }
-    sem_post(target_sem); // Releases the resource to proceed with the launch of the server's command to get this pid   
+    sem_post(target_sem); // Releases the resource to proceed with the launch of the server's command to get this pid
+    sem_close(target_sem); 
 
     /* CREATE AND SETUP THE PIPES */
     target_write_position_fd = atoi(argv[1]);
@@ -187,10 +189,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    /* END PROGRAM */
-    sem_close(exec_sem);
-    sem_close(target_sem);
-    
+    /* END PROGRAM */    
     // Close the files
     fclose(debug);
     fclose(errors);

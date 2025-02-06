@@ -205,6 +205,7 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
     sem_post(exec_sem); // Releases the resource to proceed with the launch of other child processes
+    sem_close(exec_sem);
 
     /* SAVED THE CHILD PIDS */
     for (int i = 0; i < N_PROCS; i++) {

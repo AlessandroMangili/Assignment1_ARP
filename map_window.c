@@ -177,7 +177,8 @@ int main(int argc, char *argv[]) {
         LOG_TO_FILE(errors, "Failed to open the semaphore for the exec");
         exit(EXIT_FAILURE);
     }
-    sem_post(map_sem);   
+    sem_post(map_sem);
+    sem_close(map_sem);
 
     /* SETUP THE PIPE */
     server_write_size_fd = atoi(argv[1]);
@@ -317,8 +318,6 @@ int main(int argc, char *argv[]) {
     // Unmap the shared memory region
     munmap(drone, sizeof(Drone));
     munmap(score, sizeof(float));
-
-    sem_close(map_sem);
 
     // Close the files
     fclose(debug);
