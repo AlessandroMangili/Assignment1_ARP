@@ -214,7 +214,7 @@ public:
     //!Run the Subscriber
     void run(int drone_write_size_fd, int drone_write_key_fd, int input_read_key_fd, int map_read_size_fd)
     {
-        char buffer[2048];
+        char buffer[4096];
         fd_set read_fds;
         struct timeval timeout;
 

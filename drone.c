@@ -251,7 +251,7 @@ int open_score_shared_memory() {
 }
 
 void drone_process(int map_read_size_fd, int input_read_key_fd, int obstacles_read_position_fd, int targets_read_position_fd) {
-    char buffer[256];
+    char buffer[4096];
     fd_set read_fds;
     struct timeval timeout;
 
@@ -306,11 +306,10 @@ void drone_process(int map_read_size_fd, int input_read_key_fd, int obstacles_re
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0';
                     char *left_part = strtok(buffer, ":");
-                    char *right_part = strtok(NULL, ":");
                     if (atoi(left_part) != n_obs) {
                         n_obs = atoi(left_part);
-                        obstacles = realloc(obstacles, n_obs * sizeof(Object));
-                        if (obstacles == NULL) {
+                        Object *tmp = realloc(obstacles, n_obs * sizeof(Object));
+                        if (tmp == NULL) {
                             perror("[DRONE]: Error allocating the memory for the obstacles");
                             LOG_TO_FILE(errors, "Error allocating the memory for the obstacles");
                             // Close the files
@@ -318,8 +317,11 @@ void drone_process(int map_read_size_fd, int input_read_key_fd, int obstacles_re
                             fclose(errors); 
                             exit(EXIT_FAILURE);
                         }
+                        obstacles = tmp;
                     }
                     memset(obstacles, 0, n_obs * sizeof(Object));
+
+                    char *right_part = strtok(NULL, ":");
                    
                     char *token = strtok(right_part, "|");
                     int i = 0;
@@ -339,8 +341,8 @@ void drone_process(int map_read_size_fd, int input_read_key_fd, int obstacles_re
                     char *right_part = strtok(NULL, ":");
                     if (atoi(left_part) != n_targ) {
                         n_targ = atoi(left_part);
-                        targets = realloc(targets, n_targ * sizeof(Object));
-                        if (targets == NULL) {
+                        Object *tmp = realloc(targets, n_targ * sizeof(Object));
+                        if (tmp == NULL) {
                             perror("[DRONE]: Error allocating the memory for the targets");
                             free(obstacles);
                             LOG_TO_FILE(errors, "Error allocating the memory for the targets");
@@ -349,6 +351,7 @@ void drone_process(int map_read_size_fd, int input_read_key_fd, int obstacles_re
                             fclose(errors); 
                             exit(EXIT_FAILURE);
                         }
+                        targets = tmp;
                     }
                     memset(targets, 0, n_targ * sizeof(Object));
 

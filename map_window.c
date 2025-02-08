@@ -237,7 +237,7 @@ int main(int argc, char *argv[]) {
     Object *obstacles = NULL;
     Object *targets = NULL;
 
-    char buffer[256];
+    char buffer[4096];
     fd_set read_fds;
     struct timeval timeout;
     int max_fd = -1;
@@ -274,8 +274,8 @@ int main(int argc, char *argv[]) {
                     char *right_part = strtok(NULL, ":");
                     if (atoi(left_part) != n_obs) {
                         n_obs = atoi(left_part);
-                        obstacles = realloc(obstacles, n_obs * sizeof(Object));
-                        if (obstacles == NULL) {
+                        Object *tmp = realloc(obstacles, n_obs * sizeof(Object));
+                        if (tmp == NULL) {
                             perror("[DRONE]: Error allocating the memory for the obstacles");
                             LOG_TO_FILE(errors, "Error allocating the memory for the obstacles");
                             // Close the files
@@ -283,6 +283,7 @@ int main(int argc, char *argv[]) {
                             fclose(errors); 
                             exit(EXIT_FAILURE);
                         }
+                        obstacles = tmp;
                     }
                     memset(obstacles, 0, n_obs * sizeof(Object));
 
@@ -304,8 +305,8 @@ int main(int argc, char *argv[]) {
                     char *right_part = strtok(NULL, ":");
                     if (atoi(left_part) != n_targ) {
                         n_targ = atoi(left_part);
-                        targets = realloc(targets, n_targ * sizeof(Object));
-                        if (targets == NULL) {
+                        Object *tmp = realloc(targets, n_targ * sizeof(Object));
+                        if (tmp == NULL) {
                             perror("[DRONE]: Error allocating the memory for the targets");
                             free(obstacles);
                             LOG_TO_FILE(errors, "Error allocating the memory for the targets");
@@ -314,6 +315,7 @@ int main(int argc, char *argv[]) {
                             fclose(errors); 
                             exit(EXIT_FAILURE);
                         }
+                        targets = tmp;
                     }
                     memset(targets, 0, n_targ * sizeof(Object));
 
