@@ -22,6 +22,8 @@ float *score;
 int n_obs = 0, n_targ = 0;
 Object *obstacles, *targets;
 float csi = 5;
+sem_t obstacles_sem;
+sem_t targets_sem;
 
 float calculate_friction_force(float velocity) {
     return -FRICTION_COEFFICIENT * velocity;
@@ -114,10 +116,14 @@ void update_drone_position(Drone *drone, float dt) {
     float frictionForceX = calculate_friction_force(drone->vel_x);
     float frictionForceY = calculate_friction_force(drone->vel_y);
 
+    sem_wait(&obstacles_sem);
     check_hit(drone, obstacles, n_obs, forces);
+    sem_post(&obstacles_sem);
     fx_obs = forces[0];
     fy_obs = forces[1];
+    sem_wait(&targets_sem);
     check_hit(drone, targets, n_targ, forces);
+    sem_post(&targets_sem);
     fx_tgs = forces[0];
     fy_tgs = forces[1];
 
@@ -195,11 +201,18 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
     if (sig == SIGUSR2) {
         LOG_TO_FILE(debug, "Shutting down by the WATCHDOG");
         printf("Drone shutting down by the WATCHDOG: %d\n", getpid());
-        free(obstacles);
-        free(targets);
         // Close the files
         fclose(errors);
         fclose(debug);
+        
+        sem_wait(&obstacles_sem);
+        sem_wait(&targets_sem);
+
+        free(obstacles);
+        free(targets);
+        // Destroy the semaphore
+        sem_destroy(&obstacles_sem);
+        sem_destroy(&targets_sem);
         exit(EXIT_SUCCESS);
     }
 }
@@ -306,31 +319,34 @@ void drone_process(int map_read_size_fd, int input_read_key_fd, int obstacles_re
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0';
                     char *left_part = strtok(buffer, ":");
-                    if (atoi(left_part) != n_obs) {
+                    char *right_part = strtok(NULL, ":");
+                    sem_wait(&obstacles_sem);
+                    // If the number of obstacles changes, then update the size of the pointer
+                    if (atoi(left_part) != n_obs) {  
                         n_obs = atoi(left_part);
-                        Object *tmp = realloc(obstacles, n_obs * sizeof(Object));
-                        if (tmp == NULL) {
+                        obstacles = realloc(obstacles, n_obs * sizeof(Object));
+                        if (obstacles == NULL) {
                             perror("[DRONE]: Error allocating the memory for the obstacles");
                             LOG_TO_FILE(errors, "Error allocating the memory for the obstacles");
+                            sem_post(&obstacles_sem);
                             // Close the files
                             fclose(debug);
                             fclose(errors); 
                             exit(EXIT_FAILURE);
-                        }
-                        obstacles = tmp;
+                        }                  
                     }
                     memset(obstacles, 0, n_obs * sizeof(Object));
-
-                    char *right_part = strtok(NULL, ":");
                    
                     char *token = strtok(right_part, "|");
                     int i = 0;
-                    while (token != NULL) {
-                        sscanf(token, "%d,%d,%c,%d", &obstacles[i].pos_x, &obstacles[i].pos_y, &obstacles[i].type, (int *)&obstacles[i].hit);
+                    int hit_int;
+                    while (token != NULL && i < n_obs) {
+                        sscanf(token, "%d,%d,%c,%d", &obstacles[i].pos_x, &obstacles[i].pos_y, &obstacles[i].type, &hit_int);
+                        obstacles[i].hit = (bool)hit_int;
                         token = strtok(NULL, "|");
                         i++;
                     }
-                    
+                    sem_post(&obstacles_sem);
                 }
             }
             if (FD_ISSET(targets_read_position_fd, &read_fds)) {
@@ -339,29 +355,33 @@ void drone_process(int map_read_size_fd, int input_read_key_fd, int obstacles_re
                     buffer[bytes_read] = '\0';
                     char *left_part = strtok(buffer, ":");
                     char *right_part = strtok(NULL, ":");
+                    sem_wait(&targets_sem);
+                    // If the number of targets changes, then update the size of the pointer
                     if (atoi(left_part) != n_targ) {
                         n_targ = atoi(left_part);
-                        Object *tmp = realloc(targets, n_targ * sizeof(Object));
-                        if (tmp == NULL) {
+                        targets = realloc(targets, n_targ * sizeof(Object));
+                        if (targets == NULL) {
                             perror("[DRONE]: Error allocating the memory for the targets");
-                            free(obstacles);
                             LOG_TO_FILE(errors, "Error allocating the memory for the targets");
+                            sem_post(&targets_sem);
                             // Close the files
                             fclose(debug);
                             fclose(errors); 
                             exit(EXIT_FAILURE);
                         }
-                        targets = tmp;
-                    }
+                    } 
                     memset(targets, 0, n_targ * sizeof(Object));
 
                     char *token = strtok(right_part, "|");
                     int i = 0;
-                    while (token != NULL) {
-                        sscanf(token, "%d,%d,%c,%d", &targets[i].pos_x, &targets[i].pos_y, &targets[i].type, (int *)&targets[i].hit);
+                    int hit_int;
+                    while (token != NULL && i < n_targ) {
+                        sscanf(token, "%d,%d,%c,%d", &targets[i].pos_x, &targets[i].pos_y, &targets[i].type, &hit_int);
+                        targets[i].hit = (bool)hit_int;
                         token = strtok(NULL, "|");
                         i++;
                     }
+                    sem_post(&targets_sem);
                 }
             }
         }
@@ -437,15 +457,27 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    obstacles = NULL;
-    targets = NULL;
-
     // Add sigmask to block all signals execpt SIGURS1 and SIGURS2
     sigset_t sigset;
     sigfillset(&sigset);
     sigdelset(&sigset, SIGUSR1);
     sigdelset(&sigset, SIGUSR2);
     sigprocmask(SIG_SETMASK, &sigset, NULL);
+
+    obstacles = NULL;
+    targets = NULL;
+
+    // Semaphores used to synchronize the two pointers
+    if (sem_init(&obstacles_sem, 0, 1) == -1) {
+        perror("[DRONE]: Error initializing obstacles semaphore");
+        LOG_TO_FILE(errors, "Error initializing obstacles semaphore");
+        exit(EXIT_FAILURE);
+    }
+    if (sem_init(&targets_sem, 0, 1) == -1) {
+        perror("[DRONE]: Error initializing targets semaphore");
+        LOG_TO_FILE(errors, "Error initializing targets semaphore");
+        exit(EXIT_FAILURE);
+    }
 
     /* OPEN THE SHARED MEMORY */
     int drone_mem_fd = open_drone_shared_memory();
@@ -499,9 +531,6 @@ int main(int argc, char* argv[]) {
 
     // Cancel the thread
     pthread_cancel(drone_thread);
-
-    free(obstacles);
-    free(targets);
     
     // Close the files
     fclose(debug);

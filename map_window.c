@@ -16,6 +16,8 @@ Drone *drone;
 int server_write_size_fd;            // File descriptor for sending the size of the map to the server
 int n_obs = 0, n_targ = 0;
 float *score;
+sem_t obstacles_sem;
+sem_t targets_sem;
 
 void draw_outer_box() {
     attron(COLOR_PAIR(1));
@@ -87,6 +89,9 @@ void resize_handler(int sig, siginfo_t *info, void *context) {
         // Close the files
         fclose(errors);
         fclose(debug);
+        // Destroy the semaphore
+        sem_destroy(&obstacles_sem);
+        sem_destroy(&targets_sem);
         exit(EXIT_SUCCESS);
     }
 }
@@ -141,8 +146,14 @@ void map_render(Drone *drone, Object *obstacles, Object *targets) {
     clear();
     draw_outer_box();
     render_drone(drone->pos_x, drone->pos_y);
-    render_obstacles(obstacles);
+    sem_wait(&obstacles_sem);
+    sem_wait(&targets_sem);
+
+    render_obstacles(obstacles);    
     render_targets(targets);
+
+    sem_post(&targets_sem);
+    sem_post(&obstacles_sem);
 }
 
 int main(int argc, char *argv[]) {
@@ -237,6 +248,18 @@ int main(int argc, char *argv[]) {
     Object *obstacles = NULL;
     Object *targets = NULL;
 
+    // Semaphores used to synchronize the two pointers
+    if (sem_init(&obstacles_sem, 0, 1) == -1) {
+        perror("[MAP]: Error initializing obstacles semaphore");
+        LOG_TO_FILE(errors, "Error initializing obstacles semaphore");
+        exit(EXIT_FAILURE);
+    }
+    if (sem_init(&targets_sem, 0, 1) == -1) {
+        perror("[MAP]: Error initializing targets semaphore");
+        LOG_TO_FILE(errors, "Error initializing targets semaphore");
+        exit(EXIT_FAILURE);
+    }
+
     char buffer[4096];
     fd_set read_fds;
     struct timeval timeout;
@@ -272,28 +295,31 @@ int main(int argc, char *argv[]) {
                     buffer[bytes_read] = '\0'; // End the string
                     char *left_part = strtok(buffer, ":");
                     char *right_part = strtok(NULL, ":");
+                    sem_wait(&obstacles_sem);
+                    // If the number of obstacles changes, then update the size of the pointer
                     if (atoi(left_part) != n_obs) {
                         n_obs = atoi(left_part);
-                        Object *tmp = realloc(obstacles, n_obs * sizeof(Object));
-                        if (tmp == NULL) {
+                        obstacles = realloc(obstacles, n_obs * sizeof(Object));
+                        if (obstacles == NULL) {
                             perror("[DRONE]: Error allocating the memory for the obstacles");
                             LOG_TO_FILE(errors, "Error allocating the memory for the obstacles");
+                            sem_post(&obstacles_sem);
                             // Close the files
                             fclose(debug);
                             fclose(errors); 
                             exit(EXIT_FAILURE);
                         }
-                        obstacles = tmp;
                     }
                     memset(obstacles, 0, n_obs * sizeof(Object));
 
                     char *token = strtok(right_part, "|");
                     int i = 0;
-                    while (token != NULL) {
+                    while (token != NULL && i < n_obs) {
                         sscanf(token, "%d,%d,%c", &obstacles[i].pos_x, &obstacles[i].pos_y, &obstacles[i].type);
                         token = strtok(NULL, "|");
                         i++;
                     }
+                    sem_post(&obstacles_sem);
                     map_render(drone, obstacles, targets);
                 }
             }
@@ -303,29 +329,31 @@ int main(int argc, char *argv[]) {
                     buffer[bytes_read] = '\0'; // End the string
                     char *left_part = strtok(buffer, ":");
                     char *right_part = strtok(NULL, ":");
+                    sem_wait(&targets_sem);
+                    // If the number of targets changes, then update the size of the pointer
                     if (atoi(left_part) != n_targ) {
                         n_targ = atoi(left_part);
-                        Object *tmp = realloc(targets, n_targ * sizeof(Object));
-                        if (tmp == NULL) {
+                        targets = realloc(targets, n_targ * sizeof(Object));
+                        if (targets == NULL) {
                             perror("[DRONE]: Error allocating the memory for the targets");
-                            free(obstacles);
                             LOG_TO_FILE(errors, "Error allocating the memory for the targets");
+                            sem_post(&targets_sem);
                             // Close the files
                             fclose(debug);
                             fclose(errors); 
                             exit(EXIT_FAILURE);
                         }
-                        targets = tmp;
                     }
                     memset(targets, 0, n_targ * sizeof(Object));
-
+                    
                     char *token = strtok(right_part, "|");
                     int i = 0;
-                    while (token != NULL) {
+                    while (token != NULL && i < n_targ) {
                         sscanf(token, "%d,%d,%c", &targets[i].pos_x, &targets[i].pos_y, &targets[i].type);
                         token = strtok(NULL, "|");
                         i++;
                     }
+                    sem_post(&targets_sem);
                     map_render(drone, obstacles, targets);
                 }
             }
@@ -348,6 +376,10 @@ int main(int argc, char *argv[]) {
     // Unmap the shared memory region
     munmap(drone, sizeof(Drone));
     munmap(score, sizeof(float));
+
+    // Destroy the semaphore
+    sem_destroy(&obstacles_sem);
+    sem_destroy(&targets_sem);
 
     // Close the files
     fclose(debug);
