@@ -1,4 +1,4 @@
-#include "Generated/MessagePubSubTypes.hpp"
+#include "Generated/ObjectsPubSubTypes.hpp"
 
 #include <chrono>
 #include <thread>
@@ -22,8 +22,6 @@ using namespace eprosima::fastdds::dds;
 FILE *debug, *errors;       // File descriptors for the two log files
 pid_t wd_pid, map_pid;
 Drone *drone;
-int n_obs;
-int n_targ;
 float *score;
 
 int drone_write_targets_fd, map_write_target_fd;
@@ -77,7 +75,7 @@ private:
             auto topicName = reader->get_topicdescription()->get_name();
             
             // Decide which message to process based on the topic name
-            Message* currentMessage = nullptr;
+            Objects* currentMessage = nullptr;
             std::string currentTopic = "";
 
             if (topicName == "ObstaclesTopic") {
@@ -97,13 +95,13 @@ private:
                     std::cout << "Received data from " << currentTopic /*<< ":" */ << std::endl;
 
                     // Use the correct data based on the topic
-                    std::vector<Object> objects(currentMessage->x().size());
-                    std::string objectStr;
-                    for (int i = 0; i < currentMessage->x().size(); i++) {
+                    std::vector<Object> objects(currentMessage->objects_number());
+                    std::string objectStr = std::to_string(currentMessage->objects_number()) + ":";
+                    for (int i = 0; i < currentMessage->objects_number(); i++) {
                         objects[i] = {currentMessage->x()[i], currentMessage->y()[i], (topicName == "ObstaclesTopic" ? 'o' : 't'), false};
 
                         objectStr += std::to_string(objects[i].pos_x) + "," + std::to_string(objects[i].pos_y) + "," + objects[i].type + "," + std::to_string(objects[i].hit ? 1 : 0);
-                        if (i + 1 < currentMessage->x().size()) 
+                        if (i + 1 < currentMessage->objects_number()) 
                             objectStr += "|";
 
                         /*std::cout << "Index: " << i + 1
@@ -124,7 +122,7 @@ private:
             }
         }
 
-        Message obstacleMessage_, targetMessage_;
+        Objects obstacleMessage_, targetMessage_;
 
         std::atomic_int samples_;
 
@@ -139,7 +137,7 @@ public:
         , topicT_(nullptr)
         , readerO_(nullptr)
         , readerT_(nullptr)
-        , type_(new MessagePubSubType())
+        , type_(new ObjectsPubSubType())
     {
     }
 
@@ -428,7 +426,7 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
-    if (argc < 10) {
+    if (argc < 8) {
         LOG_TO_FILE(errors, "Invalid number of parameters");
         // Close the files
         fclose(debug);
@@ -522,22 +520,13 @@ int main(int argc, char* argv[])
     sscanf(argv[7], "%f,%f", &drone->vel_x, &drone->vel_y);
     sscanf(argv[8], "%f,%f", &drone->force_x, &drone->force_y);
 
-    n_obs = atoi(argv[9]);
-    n_targ = atoi(argv[10]);
-
-    char n_obs_str[10];
-    snprintf(n_obs_str, sizeof(n_obs_str), "%d", n_obs);
-
-    char n_targ_str[10];
-    snprintf(n_targ_str, sizeof(n_targ_str), "%d", n_targ);
-
     // Unlock
     sem_post(drone->sem);
     sem_close(drone->sem);
 
     /* LAUNCH THE MAP WINDOW */
     // Fork to create the map window process
-    char *map_window_path[] = {"konsole", "-e", "./map_window", map_write_size_fd_str, map_read_obstacle_fd_str, map_read_target_fd_str, n_obs_str, n_targ_str, NULL};
+    char *map_window_path[] = {"konsole", "-e", "./map_window", map_write_size_fd_str, map_read_obstacle_fd_str, map_read_target_fd_str, NULL};
     pid_t konsole_map_pid = fork();
     if (konsole_map_pid < 0){
         perror("[SERVER]: Error forking the map file");

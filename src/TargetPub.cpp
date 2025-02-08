@@ -1,4 +1,4 @@
-#include "Generated/MessagePubSubTypes.hpp"
+#include "Generated/ObjectsPubSubTypes.hpp"
 
 #include <chrono>
 #include <thread>
@@ -26,7 +26,7 @@ class TargetPub
 {
 private:
 
-    Message message_;
+    Objects message_;
 
     DomainParticipant* participant_;
 
@@ -84,7 +84,7 @@ public:
         , publisher_(nullptr)
         , topic_(nullptr)
         , writer_(nullptr)
-        , type_(new MessagePubSubType())
+        , type_(new ObjectsPubSubType())
     {}
 
     virtual ~TargetPub()
@@ -179,6 +179,7 @@ public:
 
         message_.x().clear();
         message_.y().clear();
+        message_.objects_number() = n_object;
 
         for (int i = 0; i < n_object; i++){
             message_.x().push_back(disX(gen));

@@ -252,8 +252,8 @@ int main() {
     /* LAUNCH THE SERVER, THE DRONE, THE OBSTACLE AND THE TARGET */
     pid_t pids[N_PROCS], wd;
     char *inputs[N_PROCS - 1][16] = {
-        {"./src/Binary/ServerSub", drone_write_size_fd_str, drone_write_key_fd_str, input_read_key_fd_str, drone_write_obstacles_fd_str, drone_write_targets_fd_str, pos_str, vel_str, force_str, n_obs, n_target, NULL}, 
-        {"./drone", drone_read_map_fd_str, drone_read_key_fd_str, server_read_obstacles_fd_str, server_read_targets_fd_str, n_obs, n_target, NULL},
+        {"./src/Binary/ServerSub", drone_write_size_fd_str, drone_write_key_fd_str, input_read_key_fd_str, drone_write_obstacles_fd_str, drone_write_targets_fd_str, pos_str, vel_str, force_str, NULL}, 
+        {"./drone", drone_read_map_fd_str, drone_read_key_fd_str, server_read_obstacles_fd_str, server_read_targets_fd_str, NULL},
         {"./src/Binary/ObstaclePub", n_obs, map_x, map_y, NULL},
         {"./src/Binary/TargetPub", n_target, map_x, map_y, NULL}
     };

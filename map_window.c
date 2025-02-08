@@ -14,8 +14,7 @@ FILE *debug, *errors;           // File descriptors for the two log files
 Game game;
 Drone *drone;
 int server_write_size_fd;            // File descriptor for sending the size of the map to the server
-int n_obs;
-int n_targ;
+int n_obs = 0, n_targ = 0;
 float *score;
 
 void draw_outer_box() {
@@ -26,7 +25,7 @@ void draw_outer_box() {
     refresh();
 }
 
-void render_obstacles(Object obstacles[]) {
+void render_obstacles(Object *obstacles) {
     attron(COLOR_PAIR(3));
     for(int i = 0; i < n_obs; i++){
         if (obstacles[i].pos_y <= 0 || obstacles[i].pos_x <= 0) continue;
@@ -138,7 +137,7 @@ int open_score_shared_memory() {
     return score_mem_fd;
 }
 
-void map_render(Drone *drone, Object obstacles[], Object targets[]) {
+void map_render(Drone *drone, Object *obstacles, Object *targets) {
     clear();
     draw_outer_box();
     render_drone(drone->pos_x, drone->pos_y);
@@ -159,7 +158,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    if (argc < 6) {
+    if (argc < 4) {
         LOG_TO_FILE(errors, "Invalid number of parameters");
         // Close the files
         fclose(debug);
@@ -182,8 +181,6 @@ int main(int argc, char *argv[]) {
     /* SETUP THE PIPE */
     server_write_size_fd = atoi(argv[1]);
     int server_read_obstacle_fd = atoi(argv[2]), server_read_target_fd = atoi(argv[3]);
-    n_obs = atoi(argv[3]);
-    n_targ = atoi(argv[4]);
 
     /* SETUP NCURSE */
     initscr(); 
@@ -237,9 +234,8 @@ int main(int argc, char *argv[]) {
     // Send to the server the dimension
     write_to_server();
 
-    Object obstacles[n_obs], targets[n_targ];
-    memset(obstacles, 0, sizeof(obstacles));
-    memset(targets, 0, sizeof(targets));
+    Object *obstacles = NULL;
+    Object *targets = NULL;
 
     char buffer[256];
     fd_set read_fds;
@@ -274,7 +270,23 @@ int main(int argc, char *argv[]) {
                 ssize_t bytes_read = read(server_read_obstacle_fd, buffer, sizeof(buffer) - 1);
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0'; // End the string
-                    char *token = strtok(buffer, "|");
+                    char *left_part = strtok(buffer, ":");
+                    char *right_part = strtok(NULL, ":");
+                    if (atoi(left_part) != n_obs) {
+                        n_obs = atoi(left_part);
+                        obstacles = realloc(obstacles, n_obs * sizeof(Object));
+                        if (obstacles == NULL) {
+                            perror("[DRONE]: Error allocating the memory for the obstacles");
+                            LOG_TO_FILE(errors, "Error allocating the memory for the obstacles");
+                            // Close the files
+                            fclose(debug);
+                            fclose(errors); 
+                            exit(EXIT_FAILURE);
+                        }
+                    }
+                    memset(obstacles, 0, n_obs * sizeof(Object));
+
+                    char *token = strtok(right_part, "|");
                     int i = 0;
                     while (token != NULL) {
                         sscanf(token, "%d,%d,%c", &obstacles[i].pos_x, &obstacles[i].pos_y, &obstacles[i].type);
@@ -288,7 +300,24 @@ int main(int argc, char *argv[]) {
                 ssize_t bytes_read = read(server_read_target_fd, buffer, sizeof(buffer) - 1);
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0'; // End the string
-                    char *token = strtok(buffer, "|");
+                    char *left_part = strtok(buffer, ":");
+                    char *right_part = strtok(NULL, ":");
+                    if (atoi(left_part) != n_targ) {
+                        n_targ = atoi(left_part);
+                        targets = realloc(targets, n_targ * sizeof(Object));
+                        if (targets == NULL) {
+                            perror("[DRONE]: Error allocating the memory for the targets");
+                            free(obstacles);
+                            LOG_TO_FILE(errors, "Error allocating the memory for the targets");
+                            // Close the files
+                            fclose(debug);
+                            fclose(errors); 
+                            exit(EXIT_FAILURE);
+                        }
+                    }
+                    memset(targets, 0, n_targ * sizeof(Object));
+
+                    char *token = strtok(right_part, "|");
                     int i = 0;
                     while (token != NULL) {
                         sscanf(token, "%d,%d,%c", &targets[i].pos_x, &targets[i].pos_y, &targets[i].type);

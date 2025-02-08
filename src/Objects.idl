@@ -1,0 +1,6 @@
+struct Objects
+{
+    sequence<long> x;
+    sequence<long> y;
+    long objects_number;
+};

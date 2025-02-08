@@ -19,7 +19,7 @@ float rho0 = 2, rho1 = 0.5, rho2 = 2, eta = 40;
 Game game;
 Drone *drone;
 float *score;
-int n_obs, n_targ;
+int n_obs = 0, n_targ = 0;
 Object *obstacles, *targets;
 float csi = 5;
 
@@ -305,9 +305,24 @@ void drone_process(int map_read_size_fd, int input_read_key_fd, int obstacles_re
                 ssize_t bytes_read = read(obstacles_read_position_fd, buffer, sizeof(buffer) - 1);
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0';
-                    char *token = strtok(buffer, "|");
+                    char *left_part = strtok(buffer, ":");
+                    char *right_part = strtok(NULL, ":");
+                    if (atoi(left_part) != n_obs) {
+                        n_obs = atoi(left_part);
+                        obstacles = realloc(obstacles, n_obs * sizeof(Object));
+                        if (obstacles == NULL) {
+                            perror("[DRONE]: Error allocating the memory for the obstacles");
+                            LOG_TO_FILE(errors, "Error allocating the memory for the obstacles");
+                            // Close the files
+                            fclose(debug);
+                            fclose(errors); 
+                            exit(EXIT_FAILURE);
+                        }
+                    }
+                    memset(obstacles, 0, n_obs * sizeof(Object));
+                   
+                    char *token = strtok(right_part, "|");
                     int i = 0;
-                    memset(obstacles, 0, n_obs * sizeof(obstacles));
                     while (token != NULL) {
                         sscanf(token, "%d,%d,%c,%d", &obstacles[i].pos_x, &obstacles[i].pos_y, &obstacles[i].type, (int *)&obstacles[i].hit);
                         token = strtok(NULL, "|");
@@ -320,9 +335,25 @@ void drone_process(int map_read_size_fd, int input_read_key_fd, int obstacles_re
                 ssize_t bytes_read = read(targets_read_position_fd, buffer, sizeof(buffer) - 1);
                 if (bytes_read > 0) {
                     buffer[bytes_read] = '\0';
-                    char *token = strtok(buffer, "|");
+                    char *left_part = strtok(buffer, ":");
+                    char *right_part = strtok(NULL, ":");
+                    if (atoi(left_part) != n_targ) {
+                        n_targ = atoi(left_part);
+                        targets = realloc(targets, n_targ * sizeof(Object));
+                        if (targets == NULL) {
+                            perror("[DRONE]: Error allocating the memory for the targets");
+                            free(obstacles);
+                            LOG_TO_FILE(errors, "Error allocating the memory for the targets");
+                            // Close the files
+                            fclose(debug);
+                            fclose(errors); 
+                            exit(EXIT_FAILURE);
+                        }
+                    }
+                    memset(targets, 0, n_targ * sizeof(Object));
+
+                    char *token = strtok(right_part, "|");
                     int i = 0;
-                    memset(targets, 0, n_targ * sizeof(targets));
                     while (token != NULL) {
                         sscanf(token, "%d,%d,%c,%d", &targets[i].pos_x, &targets[i].pos_y, &targets[i].type, (int *)&targets[i].hit);
                         token = strtok(NULL, "|");
@@ -352,7 +383,7 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    if (argc < 7) {
+    if (argc < 5) {
         LOG_TO_FILE(errors, "Invalid number of parameters");
         // Close the files
         fclose(debug);
@@ -377,7 +408,6 @@ int main(int argc, char* argv[]) {
     int input_read_key_fd = atoi(argv[2]);
     int obstacles_read_position_fd = atoi(argv[3]);
     int targets_read_position_fd = atoi(argv[4]);
-    n_obs = atoi(argv[5]), n_targ = atoi(argv[6]);
 
     /* SETUP THE SIGNALS */
     struct sigaction sa;
@@ -404,34 +434,15 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    obstacles = NULL;
+    targets = NULL;
+
     // Add sigmask to block all signals execpt SIGURS1 and SIGURS2
     sigset_t sigset;
     sigfillset(&sigset);
     sigdelset(&sigset, SIGUSR1);
     sigdelset(&sigset, SIGUSR2);
     sigprocmask(SIG_SETMASK, &sigset, NULL);
-
-    obstacles = (Object *)malloc(n_obs * sizeof(Object));
-    if (obstacles == NULL) {
-        perror("[DRONE]: Error allocating the memory for the obstacles");
-        LOG_TO_FILE(errors, "Error allocating the memory for the obstacles");
-        // Close the files
-        fclose(debug);
-        fclose(errors); 
-        exit(EXIT_FAILURE);
-    }
-    targets = (Object *)malloc(n_targ * sizeof(Object));
-    if (targets == NULL) {
-        perror("[DRONE]: Error allocating the memory for the targets");
-        free(obstacles);
-        LOG_TO_FILE(errors, "Error allocating the memory for the targets");
-        // Close the files
-        fclose(debug);
-        fclose(errors); 
-        exit(EXIT_FAILURE);
-    }
-    memset(obstacles, 0, n_obs * sizeof(obstacles));
-    memset(targets, 0, n_targ * sizeof(targets));
 
     /* OPEN THE SHARED MEMORY */
     int drone_mem_fd = open_drone_shared_memory();
