@@ -164,6 +164,8 @@ void signal_handler(int sig, siginfo_t* info, void *context) {
             exit(EXIT_FAILURE);
         }
 
+        printf("Map shutting down by the SERVER: %d\n", map_pid);
+
         // Unlink the shared memory
         if (shm_unlink(DRONE_SHARED_MEMORY) == -1) {
             perror("[SERVER]: Error unlinking the drone shared memory");
@@ -352,6 +354,7 @@ int main(int argc, char *argv[]) {
     }
 
     LOG_TO_FILE(debug, "Process started");
+    printf("Server started: %d\n", getpid());
 
     /* Opens the semaphore for child process synchronization */
     sem_t *exec_sem = sem_open("/exec_semaphore", 0);
@@ -484,6 +487,7 @@ int main(int argc, char *argv[]) {
     } else {
         sem_wait(map_sem);
         map_pid = get_konsole_child(konsole_map_pid);
+        printf("Map started: %d\n", map_pid);
         sem_close(map_sem);
     }
     

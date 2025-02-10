@@ -82,6 +82,7 @@ int main(int argc, char* argv[]) {
     }
 
     LOG_TO_FILE(debug, "Process started");
+    printf("Target started: %d\n", getpid());
 
     /* Opens the semaphore for child process synchronization */
     sem_t *exec_sem = sem_open("/exec_semaphore", 0);
