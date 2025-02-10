@@ -303,6 +303,7 @@ int main() {
     } else {
         sem_wait(exec_sem);  // Wait until the child process has started
         pids[N_PROCS - 1] = get_konsole_child(konsole);
+        printf("Input started: %d\n", pids[N_PROCS - 1]);
     }
     
     usleep(500000);
