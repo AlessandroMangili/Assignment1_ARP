@@ -17,23 +17,23 @@ The game simulates a robot in an artificial environment, but it could easily be 
 
 ```
 .
+├── appsettings.json         # Contains configuration settings for the application
 ├── cJSON
 │   └── cJSON.h              # cJSON library used for JSON parsing and handling configuration file (`appsettings.json`)
-├── appsettings.json         # Contains configuration settings for the application
-├── launchFile.sh            # A shell script to compile all the files
-├── helper.h                 # Header file with helper function declarations and shared definitions
 ├── debug.log                # Stores detailed diagnostic information for debugging and analyzing system behavior
-├── error.log                # Logs errors and critical issues encountered during execution for troubleshooting
 ├── drone.c                  # Component for managing the drone's dynamics
+├── error.log                # Logs errors and critical issues encountered during execution for troubleshooting
+├── .gitignore               # Ignore the files that should not be added to the repository
+├── helper.h                 # Header file with helper function declarations and shared definitions
 ├── keyboard_manager.c       # Component for managing user choices
-├── server.c                 # Key component for managing and transmitting data between the various components
+├── launchFile.sh            # A shell script to compile all the files
 ├── main.c                   # Component for launching the application
 ├── map_window.c             # Component for managing the visualization of all elements
-├── watchdog.c               # Component for monitoring the state of the various components
+├── obstacle.c               # Component for generating obstacles      
+├── README.md                # File for the repository description
+├── server.c                 # Key component for managing and transmitting data between the various components
 ├── target.c                 # Component for generating targets
-├── obstacle.c               # Component for generating obstacles                          
-├── .gitignore               # Ignore the files that should not be added to the repository
-└── README.md                # File for the repository description
+└── watchdog.c               # Component for monitoring the state of the various components       
 ```
 
 ## Architecture sketch
