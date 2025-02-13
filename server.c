@@ -16,8 +16,7 @@ FILE *debug, *errors;       // File descriptors for the two log files
 pid_t wd_pid, map_pid, obs_pid, targ_pid;
 Drone *drone;
 time_t start;
-int n_obs;
-int n_targ;
+int n_obs, n_targ, frequency;
 float *score;
 
 void server(int drone_write_size_fd, 
@@ -281,7 +280,7 @@ void *send_signal_generation_thread() {
         do {
             time(&finish);
             diff = difftime(finish, start);
-        } while (diff < 15);
+        } while (diff < frequency);
 
         for(int i = 0; i < 2; i++) {
             if(pid_t_o[i] < 0) continue;
@@ -345,7 +344,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    if (argc < 15) {
+    if (argc < 16) {
         LOG_TO_FILE(errors, "Invalid number of parameters");
         // Close the files
         fclose(debug);
@@ -454,6 +453,7 @@ int main(int argc, char *argv[]) {
 
     n_obs = atoi(argv[13]);
     n_targ = atoi(argv[14]);
+    frequency = atof(argv[15]);
 
     char n_obs_str[10];
     snprintf(n_obs_str, sizeof(n_obs_str), "%d", n_obs);

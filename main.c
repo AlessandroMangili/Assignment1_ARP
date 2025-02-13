@@ -112,9 +112,10 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    char n_obs[10], n_target[10];
+    char n_obs[10], n_target[10], frequency[10];
     snprintf(n_obs, sizeof(n_obs), "%d", cJSON_GetObjectItemCaseSensitive(json, "NumObstacles")->valueint);
     snprintf(n_target, sizeof(n_target), "%d", cJSON_GetObjectItemCaseSensitive(json, "NumTargets")->valueint);
+    snprintf(frequency, sizeof(frequency), "%d", cJSON_GetObjectItemCaseSensitive(json, "Frequency")->valueint);
 
     cJSON *initial_position = cJSON_GetObjectItemCaseSensitive(json,"DroneInitialPosition");
     cJSON *position = cJSON_GetObjectItem(initial_position, "Position");
@@ -250,8 +251,8 @@ int main() {
 
     /* LAUNCH THE SERVER AND THE DRONE */
     pid_t pids[N_PROCS], wd;
-    char *inputs[N_PROCS - 1][16] = {
-        {"./server", drone_write_size_fd_str, drone_write_key_fd_str, input_read_key_fd_str, obstacle_write_size_fd_str, obstacle_read_position_fd_str, target_write_size_fd_str, target_read_position_fd_str, drone_write_obstacles_fd_str, drone_write_targets_fd_str, pos_str, vel_str, force_str, n_obs, n_target, NULL}, 
+    char *inputs[N_PROCS - 1][17] = {
+        {"./server", drone_write_size_fd_str, drone_write_key_fd_str, input_read_key_fd_str, obstacle_write_size_fd_str, obstacle_read_position_fd_str, target_write_size_fd_str, target_read_position_fd_str, drone_write_obstacles_fd_str, drone_write_targets_fd_str, pos_str, vel_str, force_str, n_obs, n_target, frequency, NULL}, 
         {"./drone", drone_read_map_fd_str, drone_read_key_fd_str, server_read_obstacles_fd_str, server_read_targets_fd_str, n_obs, n_target, NULL},
         {"./obstacle", obstacle_write_position_fd_str, obstacle_read_map_fd_str, n_obs, NULL},
         {"./target", target_write_position_fd_str, target_read_map_fd_str, n_target, n_target, NULL}
