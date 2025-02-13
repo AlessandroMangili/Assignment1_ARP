@@ -287,3 +287,10 @@ These primitives enable communication and synchronization between processes, as 
 ### Limitations
 
 Due to the buffer for sending targets and obstacles being limited to `4096`, only a limited number of obstacles and targets can be generated. Moreover, since there are no checks based on the drone's position or the positions of previously generated objects, it is possible for a target or obstacle to be generated exactly where the drone is located, or for two objects to be generated at the same point.
+
+## Contributors
+
+The people who worked on this project:
+
+- **Alessandro Mangili** - [@AlessandroMangili](https://github.com/AlessandroMangili)
+- **Marco Lovecchio** - [@MarcoLovecchio](https://github.com/MarcoLovecchio)
