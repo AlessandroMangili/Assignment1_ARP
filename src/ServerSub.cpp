@@ -172,7 +172,7 @@ public:
         DomainParticipantQos participantQos;
         
         participantQos.name("Participant_subscriber");
-        participant_ = DomainParticipantFactory::get_instance()->create_participant(1, participantQos);
+        participant_ = DomainParticipantFactory::get_instance()->create_participant(2, participantQos);
 
         if (participant_ == nullptr)
         {

@@ -76,7 +76,7 @@ private:
     } listener_;
 
 public:
-    int n_tgs;
+    int n_tgs, frequency;
     int map_x, map_y;
 
     TargetPub()
@@ -166,7 +166,7 @@ public:
         {
             if (matched) {
                 publish();
-                std::this_thread::sleep_for(std::chrono::seconds(15));
+                std::this_thread::sleep_for(std::chrono::seconds(frequency));
             }
         }
     }
@@ -224,7 +224,7 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
-    if (argc < 3) {
+    if (argc < 4) {
         LOG_TO_FILE(errors, "Invalid number of parameters");
         // Close the files
         fclose(debug);
@@ -254,8 +254,9 @@ int main(int argc, char* argv[])
     }
 
     mypub->n_tgs = atoi(argv[1]);
-    mypub->map_x = atoi(argv[2]);
-    mypub->map_y = atoi(argv[3]);
+    mypub->frequency = atoi(argv[2]);
+    mypub->map_x = atoi(argv[3]);
+    mypub->map_y = atoi(argv[4]);
 
     /* SETTING THE SIGNALS */
     struct sigaction sa;

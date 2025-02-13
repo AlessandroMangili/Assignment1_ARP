@@ -113,9 +113,10 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    char n_obs[10], n_target[10], map_x[10], map_y[10];
+    char n_obs[10], n_target[10], frequency[10], map_x[10], map_y[10];
     snprintf(n_obs, sizeof(n_obs), "%d", cJSON_GetObjectItemCaseSensitive(json, "NumObstacles")->valueint);
     snprintf(n_target, sizeof(n_target), "%d", cJSON_GetObjectItemCaseSensitive(json, "NumTargets")->valueint);
+    snprintf(frequency, sizeof(frequency), "%d", cJSON_GetObjectItemCaseSensitive(json, "Frequency")->valueint);
     snprintf(map_x, sizeof(map_x), "%d", cJSON_GetObjectItemCaseSensitive(json, "MapDimensionX")->valueint);
     snprintf(map_y, sizeof(map_y), "%d", cJSON_GetObjectItemCaseSensitive(json, "MapDimensionY")->valueint);
 
@@ -254,8 +255,8 @@ int main() {
     char *inputs[N_PROCS - 1][16] = {
         {"./src/Binary/ServerSub", drone_write_size_fd_str, drone_write_key_fd_str, input_read_key_fd_str, drone_write_obstacles_fd_str, drone_write_targets_fd_str, pos_str, vel_str, force_str, NULL}, 
         {"./drone", drone_read_map_fd_str, drone_read_key_fd_str, server_read_obstacles_fd_str, server_read_targets_fd_str, NULL},
-        {"./src/Binary/ObstaclePub", n_obs, map_x, map_y, NULL},
-        {"./src/Binary/TargetPub", n_target, map_x, map_y, NULL}
+        {"./src/Binary/ObstaclePub", n_obs, frequency, map_x, map_y, NULL},
+        {"./src/Binary/TargetPub", n_target, frequency, map_x, map_y, NULL}
     };
 
     for (int i = 0; i < N_PROCS - 1; i++) {
