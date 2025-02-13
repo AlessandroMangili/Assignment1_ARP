@@ -266,9 +266,9 @@ After building, run the executable:
 ### Signals
 
 The signals used are as follows: 
-- `SIGUSR1` to send a response to the watchdog,
-- `SIGUSR2` to terminate the component,
-- `SIGWINCH` for window resizing,
+- `SIGUSR1` to send a response to the watchdog.
+- `SIGUSR2` to terminate the component.
+- `SIGWINCH` for window resizing.
 - `SIGTERM` for the generation of obstacles and targets by the components.
 
 The default signal behavior is overridden using the `sigaction()` primitive, while `sigprocmask()` is employed to block all other signals. This ensures that if a component receives an unexpected signal (i.e., one not listed), it can ignore it without any effect. The signal mask is custom for each component based on which signals it needs to receive.
@@ -276,12 +276,12 @@ The default signal behavior is overridden using the `sigaction()` primitive, whi
 ### Primitives
 
 The primitives used in this program are:
-- Pipes (both named and unnamed)
-- Semaphores
-- Shared memory
-- Signals
-- Fork
-- Execvp
+- `Pipes` (both named and unnamed)
+- `Semaphores`
+- `Shared memory`
+- `Signals`
+- `Fork`
+- `Execvp`
 
 These primitives enable communication and synchronization between processes, as well as the creation and execution of new processes.
 
