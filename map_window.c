@@ -169,7 +169,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    if (argc < 4) {
+    if (argc < 6) {
         LOG_TO_FILE(errors, "Invalid number of parameters");
         // Close the files
         fclose(debug);
@@ -240,8 +240,9 @@ int main(int argc, char *argv[]) {
     int drone_mem_fd = open_drone_shared_memory();
     int score_mem_fd = open_score_shared_memory();
 
-    // Retrive the dimension of the terminal
-    getmaxyx(stdscr, game.max_y, game.max_x);
+    // Retrive the dimension of the JSON file
+    game.max_x = atoi(argv[4]);
+    game.max_y = atoi(argv[5]);
     // Send to the server the dimension
     write_to_server();
 

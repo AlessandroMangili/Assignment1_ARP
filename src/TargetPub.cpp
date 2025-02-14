@@ -110,7 +110,7 @@ public:
         DomainParticipantQos participantQos;
         
         participantQos.name("Participant_publisher");
-        participant_ = DomainParticipantFactory::get_instance()->create_participant(2, participantQos);
+        participant_ = DomainParticipantFactory::get_instance()->create_participant(1, participantQos);
 
         if (participant_ == nullptr)
         {
