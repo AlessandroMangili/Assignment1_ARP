@@ -172,7 +172,7 @@ public:
         DomainParticipantQos participantQos;
         
         participantQos.name("Participant_subscriber");
-        participant_ = DomainParticipantFactory::get_instance()->create_participant(2, participantQos);
+        participant_ = DomainParticipantFactory::get_instance()->create_participant(1, participantQos);
 
         if (participant_ == nullptr)
         {
@@ -272,14 +272,14 @@ public:
 };
 
 
-// Gets the pid of the process running on the Konsole terminal
-int get_konsole_child(pid_t konsole) {
+// Gets the pid of the process running on the xterm terminal
+int get_xterm_child(pid_t xterm) {
     char cmd[100];
-    sprintf(cmd, "ps --ppid %d -o pid= 2>/dev/null", konsole);
+    sprintf(cmd, "ps --ppid %d -o pid= 2>/dev/null", xterm);
     FILE *pipe = popen(cmd, "r");
     if (pipe == NULL) {
-        perror("[SERVER]: Error opening the pipe to write the PID of the executed process on the terminal (Konsole)");
-        LOG_TO_FILE(errors, "Error opening the pipe to write the PID of the executed process on the terminal (Konsole)");
+        perror("[SERVER]: Error opening the pipe to write the PID of the executed process on the terminal (xterm)");
+        LOG_TO_FILE(errors, "Error opening the pipe to write the PID of the executed process on the terminal (xterm)");
         // Close the files
         fclose(debug);
         fclose(errors);
@@ -533,18 +533,20 @@ int main(int argc, char* argv[])
     snprintf(map_x_str, sizeof(map_x_str), "%d", map_x);
     snprintf(map_y_str, sizeof(map_y_str), "%d", map_y);
 
+    char geometry_str[20];
+    snprintf(geometry_str, sizeof(geometry_str), "%dx%d", map_x, map_y);
     /* LAUNCH THE MAP WINDOW */
     // Fork to create the map window process
-    char *map_window_path[] = {"konsole", "-e", "./map_window", map_write_size_fd_str, map_read_obstacle_fd_str, map_read_target_fd_str, map_x_str, map_y_str, NULL};
-    pid_t konsole_map_pid = fork();
-    if (konsole_map_pid < 0){
+    char *map_window_path[] = {"xterm", "-geometry", geometry_str, "-e", "./map_window", map_write_size_fd_str, map_read_obstacle_fd_str, map_read_target_fd_str, map_x_str, map_y_str, NULL};
+    pid_t xterm_map_pid = fork();
+    if (xterm_map_pid < 0){
         perror("[SERVER]: Error forking the map file");
         LOG_TO_FILE(errors, "Error forking the map file");
         // Close the files
         fclose(debug);
         fclose(errors);
         exit(EXIT_FAILURE);
-    } else if (konsole_map_pid == 0){
+    } else if (xterm_map_pid == 0){
         execvp(map_window_path[0], map_window_path);
         perror("[SERVER]: Failed to execute to launch the map file");
         LOG_TO_FILE(errors, "Failed to execute to launch the map file");
@@ -554,7 +556,7 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     } else {
         sem_wait(map_sem);
-        map_pid = get_konsole_child(konsole_map_pid);
+        map_pid = get_xterm_child(xterm_map_pid);
         printf("Map started: %d\n", map_pid);
         sem_close(map_sem);
     }
